@@ -1,5 +1,6 @@
 ---
-status: complete
+status: archived
+archived: 2026-11-03
 started: 2026-09-03
 spec: initiatives/cuis-mcp-bridge/technical-spec.md
 last-completed-phase: 13
@@ -567,3 +568,13 @@ Verified live end-to-end: forced a real 60s-idle cleanup through the bridge and 
 Headless SUnit: 28/28 passing (27 + the new `list_methods` regression test; the log-severity fix
 has no independently observable wire-protocol behavior, so no dedicated test was added for it —
 consistent with not asserting `Transcript` content elsewhere in this suite).
+
+## Retrospective
+
+All 13 phases completed (3 image-side scaffold/TDD, 3 reflection/TDD, 5 Node bridge, 2 docs/scaffold). The Cuis-side `McpBridgeServer`/`McpBridgeConnection` and the Node `CuisClient`/`createTools`/stdio entrypoint shipped with SUnit and Vitest suites.
+
+Deviations from the spec, each caught by tests or live use: the spec's `FileStream` test runner doesn't exist in Cuis 7.8 (replaced with `CodePackageFile installPackage:`); `ConnectionQueue` binds to all interfaces, so a loopback-only subclass was needed; `SystemOrganization categories` returns Symbols and `ClassDescription>>comment` returns a placeholder instead of `nil`; and a GREEN-phase `setImmediate` auto-close would have dropped the persistent connection and was fixed at its root cause (test cleanup).
+
+Post-implementation dogfooding found more bugs the headless suite couldn't: `requestLoop` hung on empty socket reads (timeouts were treated as peer-closed), a `list_methods` call with a nonexistent protocol returned an empty list instead of `not_found`, and inactivity-cleanup produced misleading error logs. The last was fixed with tell-don't-ask after the first design was rejected. Final headless SUnit state was 28/28.
+
+Lesson: live use against a real interactive image surfaced socket and timing bugs that headless tests missed. Formal static and dynamic verification reports were never produced for this initiative, and the end-to-end MCP-client verification the spec called for was covered only informally through dogfooding.

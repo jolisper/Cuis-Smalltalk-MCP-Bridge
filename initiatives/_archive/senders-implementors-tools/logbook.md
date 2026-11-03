@@ -2,7 +2,8 @@
 spec: initiatives/senders-implementors-tools/technical-spec.md
 started: 2026-09-15
 last-completed-phase: 5
-status: complete
+status: archived
+archived: 2026-11-03
 ---
 
 ## 2026-09-16
@@ -328,3 +329,20 @@ reports "expected 2"). Full report: `verify-dynamic-report.md`.
 - mcp-bridge/README.md
 - tools/run-headless-tests.sh
 - mcp-bridge/image/run-tests.st
+
+## Retrospective
+
+All 5 phases completed: PROTOCOL.md and `protocol.ts` scaffolds, the TDD phase on the Cuis side, `tools.ts` and its tests, and the README. The initiative added two read-only tools, `list_senders_of` and `list_implementors_of`, mirroring the System Browser's "Senders of..." and "Implementors of..." menu items. It bumped `PROTOCOL_VERSION` to 2 and followed the existing 7-operation pattern as the technical spec anticipated. Final state was 41 Cuis-side SUnit tests and 13 Vitest tests passing.
+
+Deviations from the spec, all found by testing rather than planned:
+- A multi-class test exposed a latent bug in the vendored `Json` array renderer. It embeds literal newlines in responses with 2 or more rows, which breaks the wire protocol's single-line framing. It was fixed locally in `sendSuccess:`, leaving the vendored package alone.
+- Two user-authorized test-infrastructure side quests: a chunked-response test helper, and bundling `JSON.pck.st` and `Network-Kernel.pck.st` into `.headless-base`.
+- Static verification found 8 of 18 invariants covered. Five more were closed with new tests, bringing it to 13 of 18. The other 5 are inherited "must not regress" guarantees and were left without dedicated tests.
+
+Dynamic verification caught two bugs that the static suite structurally could not:
+- `McpBridgeConnection class>>protocolVersion` still returned 1 while the docs and TypeScript were bumped to 2. The tests hardcoded 1, so they drifted consistently with the constant.
+- The sort block compared only class name, with no tie-break by side or selector. The fixtures never had two rows in the same class.
+
+Result: 17 of 18 invariants passed live. The remaining one, live-state fidelity, has no runtime surface in a read-only bridge.
+
+Lesson: hand-picked single-row fixtures and self-consistent test constants hide real bugs. A live run against real, large data and the real wire protocol caught both of the bugs above.
