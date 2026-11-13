@@ -28,6 +28,8 @@ vm-exploration/      VM/image primitive exploration sandbox.
   docs/              HowToBuild.md and PluginManual.md — how to build the VM and write a plugin.
   references/        Background papers on Smalltalk VM development.
 
+cuisctl/             Manager for named Cuis images (instances) — see cuisctl/README.md.
+
 initiatives/         Per-initiative planning docs (problem/goals, specs, logbooks) — not code.
 tools/               Setup, build, and test scripts shared across the repo (see below).
 TODO.md              Open follow-ups not yet turned into an initiative.
