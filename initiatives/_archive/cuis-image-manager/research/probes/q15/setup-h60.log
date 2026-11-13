@@ -1,0 +1,5 @@
+2026-11-10 23:35:33.127 Squeak[29672:11195949] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-10T23:35:33.346 process:40 962724 {'Compiler evaluate contents of file named: ' . '/Users/jolisper/Source/Cuis-Smalltalk-MCP-Bridge/initiatives/cuis-image-manager/research/probes/q15/setup-h60.st' . ' -> ' . /Users/jolisper/Source/Cuis-Smalltalk-MCP-Bridge/initiatives/cuis-image-manager/research/probes/q15/setup-h60.st . ' arguments: ' . #()}
+2026-11-10T23:35:33.353 process:40 962724 H60 armed=true prio=60
+2026-11-10T23:35:33.361 process:40 962724 
+2026-11-10T23:35:33.362 process:40 962724 ----QUIT----(10 November 2026 23:35:33) Cuis7.8.image priorSource: 3428

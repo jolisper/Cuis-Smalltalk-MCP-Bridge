@@ -1,0 +1,8 @@
+2026-11-10 12:35:09.050 Squeak[98629:10315482] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-10T12:35:09.356 process:40 51916 UndefinedObject>>DoIt (Json is Undeclared) 
+2026-11-10T12:35:09.356 process:40 51916 Package JSON successfully installed
+2026-11-10T12:35:09.361 process:40 51916 PROBE loaded provides=Feature(JSON 1.29)
+2026-11-10T12:35:09.362 process:40 51916 PROBE file provides=Feature(JSON 1.29)
+2026-11-10T12:35:09.456 process:40 51916 PROBE after save:
+2026-11-10T12:35:09.456 process:40 51916 PROBE loaded provides=Feature(JSON 1.30)
+2026-11-10T12:35:09.457 process:40 51916 PROBE file provides=Feature(JSON 1.30)

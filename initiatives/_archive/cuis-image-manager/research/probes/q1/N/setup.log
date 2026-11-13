@@ -1,0 +1,8 @@
+2026-11-09 14:42:46.165 Squeak[72341:9749214] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-09T14:42:46.430 process:40 195047 UndefinedObject>>DoIt (SignalTrapProbe is Undeclared) S1 class
+2026-11-09T14:42:46.434 process:40 195047 S2 install
+2026-11-09T14:42:46.436 process:40 195047 S3 hooks
+2026-11-09T14:42:46.438 process:40 195047 S4 installed
+2026-11-09T14:42:46.438 process:40 195047 SETUP-N done
+2026-11-09T14:42:46.447 process:40 195047 
+2026-11-09T14:42:46.447 process:40 195047 ----QUIT----(9 November 2026 14:42:46) Cuis7.8.image priorSource: 68

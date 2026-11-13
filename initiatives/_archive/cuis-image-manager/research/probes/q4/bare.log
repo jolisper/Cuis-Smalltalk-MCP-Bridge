@@ -1,0 +1,5 @@
+2026-11-09 18:57:28.392 Squeak[24162:10000599] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-09T18:57:28.580 process:40 1969193 PROBE cuisBase=/private/tmp/claude-501/-Users-jolisper-Source-Cuis-Smalltalk-MCP-Bridge/4a067712-58f9-49e9-ab4d-65ce3b79ebe4/scratchpad/q4/bare/image
+2026-11-09T18:57:28.580 process:40 1969193 PROBE userBase=/private/tmp/claude-501/-Users-jolisper-Source-Cuis-Smalltalk-MCP-Bridge/4a067712-58f9-49e9-ab4d-65ce3b79ebe4/scratchpad/q4/bare/files
+2026-11-09T18:57:28.580 process:40 1969193 PROBE coreUpdatesExists=false
+2026-11-09T18:57:28.581 process:40 1969193 PROBE packagesExists=false

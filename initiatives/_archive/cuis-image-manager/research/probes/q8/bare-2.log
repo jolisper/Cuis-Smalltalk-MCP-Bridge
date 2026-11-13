@@ -1,0 +1,4 @@
+2026-11-10 14:18:45.430 Squeak[41864:10482304] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-10T14:18:46.082 process:40 2457077 PROBE -l ran
+2026-11-10T14:18:54.091 process:50 1492842 PROBE watcher woke
+2026-11-10T14:18:54.094 process:50 1492842 PROBE watcher error: MessageNotUnderstood 'WorldMorph>>allMorphs'

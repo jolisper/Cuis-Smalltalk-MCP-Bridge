@@ -1,0 +1,3 @@
+2026-11-10 23:29:03.975 Squeak[22746:11177833] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-10T23:29:04.178 process:40 2007625 {'Compiler evaluate contents of file named: ' . '/Users/jolisper/Source/Cuis-Smalltalk-MCP-Bridge/initiatives/cuis-image-manager/research/probes/q13/R1-naive.st' . ' -> ' . /Users/jolisper/Source/Cuis-Smalltalk-MCP-Bridge/initiatives/cuis-image-manager/research/probes/q13/R1-naive.st . ' arguments: ' . #()}
+sqSocketListenOnPortBacklogSizeInterface (bind): Address already in use

@@ -1,0 +1,8 @@
+2026-11-10 14:25:10.935 Squeak[47441:10496267] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-10T14:25:11.179 process:40 3444905 UndefinedObject>>DoIt (ProbeUserFiles is Undeclared) PROBE userBaseDirectory=/private/tmp/claude-501/-Users-jolisper-Source-Cuis-Smalltalk-MCP-Bridge/4a067712-58f9-49e9-ab4d-65ce3b79ebe4/scratchpad/q9/A-userfiles/iso/U/files
+2026-11-10T14:25:11.180 process:40 3444905 PROBE userChangesDirectory=/private/tmp/claude-501/-Users-jolisper-Source-Cuis-Smalltalk-MCP-Bridge/4a067712-58f9-49e9-ab4d-65ce3b79ebe4/scratchpad/q9/A-userfiles/iso/U/files/UserChanges
+2026-11-10T14:25:11.180 process:40 3444905 PROBE fileOutsDirectory=/private/tmp/claude-501/-Users-jolisper-Source-Cuis-Smalltalk-MCP-Bridge/4a067712-58f9-49e9-ab4d-65ce3b79ebe4/scratchpad/q9/A-userfiles/iso/U/files/FileOuts
+2026-11-10T14:25:11.181 process:40 3444905 PROBE logsDirectory=/private/tmp/claude-501/-Users-jolisper-Source-Cuis-Smalltalk-MCP-Bridge/4a067712-58f9-49e9-ab4d-65ce3b79ebe4/scratchpad/q9/A-userfiles/iso/U/files/Logs
+2026-11-10T14:25:11.182 process:40 3444905 PROBE savedChangeSetsDirectory=/private/tmp/claude-501/-Users-jolisper-Source-Cuis-Smalltalk-MCP-Bridge/4a067712-58f9-49e9-ab4d-65ce3b79ebe4/scratchpad/q9/A-userfiles/iso/U/files/ChangeSets
+2026-11-10T14:25:11.183 process:40 3444905 PROBE newPackagesDirectory=/private/tmp/claude-501/-Users-jolisper-Source-Cuis-Smalltalk-MCP-Bridge/4a067712-58f9-49e9-ab4d-65ce3b79ebe4/scratchpad/q9/A-userfiles/iso/U/files/NewPackages
+2026-11-10T14:25:11.224 process:40 3444905 PROBE fileOut done

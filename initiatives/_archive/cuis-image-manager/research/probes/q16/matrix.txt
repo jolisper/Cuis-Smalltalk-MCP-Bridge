@@ -1,0 +1,5 @@
+nothing                lsof=0   bind127=free       bind0000=free       bindDefault=free       connect=ECONNREFUSED
+python 127.0.0.1       lsof=1   bind127=EADDRINUSE bind0000=free       bindDefault=free       connect=in-use
+python 0.0.0.0         lsof=1   bind127=free       bind0000=EADDRINUSE bindDefault=free       connect=in-use
+python :: v6           lsof=1   bind127=free       bind0000=EADDRINUSE bindDefault=EADDRINUSE connect=in-use
+nc -l (no host)        lsof=1   bind127=free       bind0000=EADDRINUSE bindDefault=free       connect=in-use

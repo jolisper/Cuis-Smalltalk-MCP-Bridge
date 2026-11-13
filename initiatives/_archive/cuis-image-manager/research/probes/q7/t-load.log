@@ -1,0 +1,7 @@
+2026-11-10 12:35:08.152 Squeak[98611:10315332] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-10T12:35:08.930 process:40 750252 
+2026-11-10T12:35:08.930 process:40 750252 Package JSON successfully installed
+2026-11-10T12:35:08.935 process:40 750252 PROBE loaded provides=Feature(JSON 1.29)
+2026-11-10T12:35:08.936 process:40 750252 PROBE file provides=Feature(JSON 1.29)
+2026-11-10T12:35:08.946 process:40 750252 
+2026-11-10T12:35:08.946 process:40 750252 ----QUIT----(10 November 2026 12:35:08) Cuis7.8.image priorSource: 68
