@@ -1,0 +1,11 @@
+2026-11-09 21:20:07.394 Squeak[31832:10036175] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-09T21:20:10.201 process:40 1518263 PROBE pre packages=#()
+2026-11-09T21:20:10.201 process:40 1518263 PROBE pre bridgeClass=false
+2026-11-09T21:20:10.522 process:40 1518263 
+2026-11-09T21:20:10.522 process:40 1518263 Package JSON successfully installed
+2026-11-09T21:20:10.952 process:40 1518263 
+2026-11-09T21:20:10.953 process:40 1518263 Package Network-Kernel successfully installed
+2026-11-09T21:20:11.071 process:40 1518263 
+2026-11-09T21:20:11.071 process:40 1518263 Package MCP-Bridge successfully installed
+2026-11-09T21:20:11.076 process:40 1518263 PROBE post packages=#('Network-Kernel' 'MCP-Bridge' 'JSON')
+2026-11-09T21:20:11.076 process:40 1518263 PROBE post bridgeClass=true

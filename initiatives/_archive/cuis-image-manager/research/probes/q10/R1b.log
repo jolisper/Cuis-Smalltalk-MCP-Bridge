@@ -1,0 +1,10 @@
+2026-11-10 14:49:15.693 Squeak[58093:10533597] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-10T14:49:16.135 process:40 2813231 
+2026-11-10T14:49:16.136 process:40 2813231 Package JSON successfully installed
+2026-11-10T14:49:16.144 process:40 2813231 PROBE calling save
+2026-11-10T14:49:16.144 process:40 2813231 PROBE save returned
+2026-11-10T14:49:16.210 process:40 2813231 PROBE UI save start
+2026-11-10T14:49:24.149 process:50 364600 PROBE window: 'CannotDeleteFileException: Could not delete the old version of file /private/tmp/claude-501/-Users-jolisper-Source-Cuis-Smalltalk-MCP-Bridge/4a067712-58f9-49e9-ab4d-65ce3b79ebe4/scratchpad/q10/instances/X/Packages/Features/JSON.pck.st - Process: Morphic UI - Priority: 40 (2813231)'
+2026-11-10T14:49:24.155 process:50 364600 PROBE window: 'Transcript'
+2026-11-10T14:49:24.158 process:50 364600 PROBE window: #TaskbarMorph
+2026-11-10T14:49:24.161 process:50 364600 PROBE unsaved=true

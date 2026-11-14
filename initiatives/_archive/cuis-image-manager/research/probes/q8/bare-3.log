@@ -1,0 +1,4 @@
+2026-11-10 14:19:13.754 Squeak[42474:10483819] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-10T14:19:14.025 process:40 2996909 PROBE -l ran
+2026-11-10T14:19:22.033 process:50 3826161 PROBE dialog text: 'Could not find a CoreUpdates folder'
+2026-11-10T14:19:22.036 process:50 3826161 PROBE dialogShown=true

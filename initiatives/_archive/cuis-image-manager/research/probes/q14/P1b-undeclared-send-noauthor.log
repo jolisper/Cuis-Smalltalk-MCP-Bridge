@@ -1,0 +1,3 @@
+2026-11-10 23:32:17.163 Squeak[26579:11187322] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-10T23:32:17.321 process:40 929061 UndefinedObject>>DoIt (FooUndeclared is Undeclared) M1
+2026-11-10T23:32:17.321 process:40 929061 M2

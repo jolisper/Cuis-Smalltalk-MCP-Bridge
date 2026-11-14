@@ -1,0 +1,6 @@
+2026-11-09 14:42:27.065 Squeak[71705:9747851] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-09T14:42:27.282 process:40 3794613 UndefinedObject>>DoIt (SignalTrapProbe is Undeclared) A
+2026-11-09T14:42:27.282 process:40 3794613 B
+2026-11-09T14:42:27.325 process:40 3794613 C
+2026-11-09T14:42:27.327 process:40 3794613 D
+2026-11-09T14:42:27.328 process:40 3794613 E

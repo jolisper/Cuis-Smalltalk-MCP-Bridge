@@ -1,0 +1,3 @@
+2026-11-11 00:00:27.221 Squeak[47128:11246667] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-11T00:00:27.703 process:30 2091952 
+2026-11-11T00:00:27.705 process:30 2091952 ----QUIT----(11 November 2026 00:00:27) Cuis7.8.image priorSource: 241559

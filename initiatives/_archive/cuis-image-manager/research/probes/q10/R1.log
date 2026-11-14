@@ -1,0 +1,24 @@
+2026-11-10 14:48:48.482 Squeak[57594:10532251] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-10T14:48:49.351 process:40 3804453 
+2026-11-10T14:48:49.352 process:40 3804453 Package JSON successfully installed
+2026-11-10T14:48:49.375 process:40 3804453 PROBE calling save
+2026-11-10T14:48:49.380 process:40 3804453 CannotDeleteFileException: Could not delete the old version of file /private/tmp/claude-501/-Users-jolisper-Source-Cuis-Smalltalk-MCP-Bridge/4a067712-58f9-49e9-ab4d-65ce3b79ebe4/scratchpad/q10/instances/X/Packages/Features/JSON.pck.st
+2026-11-10T14:48:49.381 process:40 3804453 while evaluating: Transcript logToStdout: true.
+2026-11-10T14:48:49.381 process:40 3804453 Utilities setAuthorName: 'Probe' initials: 'prb'.
+2026-11-10T14:48:49.381 process:40 3804453 [ Feature require: 'JSON' ] on: ParserNotification do: [ :ex | ex resume: nil ].
+2026-11-10T14:48:49.381 process:40 3804453 Json compile: 'probeReadOnly
+2026-11-10T14:48:49.381 process:40 3804453 	^ 1' classified: 'probe'.
+2026-11-10T14:48:49.381 process:40 3804453 [ (Delay forSeconds: 8) wait.
+2026-11-10T14:48:49.381 process:40 3804453   [ UISupervisor ui submorphs do: [ :m | (m respondsTo: #label) ifTrue: [ Transcript show: 'PROBE window: ', m label printString; newLine ] ].
+2026-11-10T14:48:49.381 process:40 3804453     UISupervisor ui allMorphsDo: [ :m |
+2026-11-10T14:48:49.381 process:40 3804453 		((m respondsTo: #contents) and: [ m contents isString and: [ (m contents includesSubString: 'delete') or: [ m contents includesSubString: 'Cannot' ] ] ])
+2026-11-10T14:48:49.381 process:40 3804453 			ifTrue: [ Transcript show: 'PROBE text: ', m contents printString; newLine ] ].
+2026-11-10T14:48:49.381 process:40 3804453     Transcript show: 'PROBE unsaved=', (CodePackage installedPackages at: 'JSON') hasUnsavedChanges printString; newLine ]
+2026-11-10T14:48:49.381 process:40 3804453 	on: Error do: [ :ex | Transcript show: 'PROBE watcher error: ', ex class name, ' ', ex messageText printString; newLine ].
+2026-11-10T14:48:49.381 process:40 3804453   Smalltalk quitPrimitive: 0 ] forkAt: Processor userInterruptPriority.
+2026-11-10T14:48:49.381 process:40 3804453 Transcript show: 'PROBE calling save'; newLine.
+2026-11-10T14:48:49.381 process:40 3804453 (CodePackage installedPackages at: 'JSON') save.
+2026-11-10T14:48:49.381 process:40 3804453 Transcript show: 'PROBE save returned'; newLine
+2026-11-10T14:48:57.355 process:50 1763232 PROBE window: 'Transcript'
+2026-11-10T14:48:57.358 process:50 1763232 PROBE window: #TaskbarMorph
+2026-11-10T14:48:57.363 process:50 1763232 PROBE unsaved=true

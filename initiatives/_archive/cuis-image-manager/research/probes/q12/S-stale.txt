@@ -1,0 +1,9 @@
+live: Tue Nov 10 23:26:21 2026     /Users/jolisper/.cuis-mcp-bridge/cuis/7.8-d4f9cc1/dist/CuisVM.app/Contents/MacOS/Squeak -headless /Users/jolisper/Source/Cuis-Smalltalk-MCP-Bridge/initiatives/cuis-image-manager/research/probes/q12/instances/M/Cuis7.8.image -ApplePersistenceIgnoreState YES
+cwd:  n/Users/jolisper/Source/Cuis-Smalltalk-MCP-Bridge/initiatives/cuis-image-manager/research/probes/q12/instances/M/files
+open files on image: 0
+open files on changes: 1
+rc=0
+after exit: ps rc=1
+(eval):kill:11: kill 18403 failed: no such process
+after exit: kill -0 rc=1
+other process: sleep 30

@@ -1,0 +1,7 @@
+2026-11-10 23:55:26.228 Squeak[44954:11237825] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-10T23:55:26.526 process:40 4036163 
+2026-11-10T23:55:26.526 process:40 4036163 Package SignalTrap successfully installed
+2026-11-10T23:55:26.530 process:40 4036163 LOADED armed=true startUp=true
+2026-11-10T23:55:26.539 process:40 4036163 REPORT armed=true live=8 semWaiters=5
+2026-11-10T23:55:26.545 process:40 4036163 
+2026-11-10T23:55:26.545 process:40 4036163 ----QUIT----(10 November 2026 23:55:26) Cuis7.8.image priorSource: 68

@@ -1,0 +1,5 @@
+2026-11-10 21:45:11.284 Squeak[83273:11034665] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-10T21:45:11.428 process:40 2893363 {'Compiler evaluate contents of file named: ' . '/Users/jolisper/Source/Cuis-Smalltalk-MCP-Bridge/initiatives/cuis-image-manager/research/probes/q11/R-relaunch-term.st' . ' -> ' . /Users/jolisper/Source/Cuis-Smalltalk-MCP-Bridge/initiatives/cuis-image-manager/research/probes/q11/R-relaunch-term.st . ' arguments: ' . #()}
+2026-11-10T21:45:11.439 process:40 2893363 REPORT armed=true live=10 semWaiters=6
+2026-11-10T21:45:17.266 process:30 1899008 
+2026-11-10T21:45:17.269 process:30 1899008 ----QUIT----(10 November 2026 21:45:17) Cuis7.8.image priorSource: 3832

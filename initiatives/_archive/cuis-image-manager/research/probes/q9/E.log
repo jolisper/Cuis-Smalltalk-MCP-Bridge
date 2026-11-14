@@ -1,0 +1,7 @@
+2026-11-10 14:41:22.211 Squeak[54152:10520698] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-10T14:41:22.856 process:40 3902690 
+2026-11-10T14:41:22.856 process:40 3902690 Package JSON successfully installed
+2026-11-10T14:41:22.862 process:40 3902690 PROBE unsaved=true
+2026-11-10T14:41:22.862 process:40 3902690 PROBE calling installPackage:
+2026-11-10T14:41:30.863 process:50 810920 PROBE confirm text: 'If you install this package, there are unsaved changes that will be lost.'
+2026-11-10T14:41:30.865 process:50 810920 PROBE confirmShown=true probeLocalOnly still present=true

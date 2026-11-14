@@ -1,0 +1,3 @@
+2026-11-11 00:45:09.739 Squeak[67819:11315625] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-11T00:45:09.898 process:40 962724 {'Compiler evaluate contents of file named: ' . '/Users/jolisper/Source/Cuis-Smalltalk-MCP-Bridge/initiatives/cuis-image-manager/research/probes/q17/boot-mark.st' . ' -> ' . /Users/jolisper/Source/Cuis-Smalltalk-MCP-Bridge/initiatives/cuis-image-manager/research/probes/q17/boot-mark.st . ' arguments: ' . #()}
+2026-11-11T00:45:09.901 process:40 962724 BOOT armed=false

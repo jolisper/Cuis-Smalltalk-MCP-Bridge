@@ -1,0 +1,5 @@
+2026-11-11 00:46:58.415 Squeak[68820:11318912] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-11T00:46:58.612 process:40 2089524 {'Compiler evaluate contents of file named: ' . '/Users/jolisper/Source/Cuis-Smalltalk-MCP-Bridge/initiatives/cuis-image-manager/research/probes/q17/../q15/busy-40.st' . ' -> ' . /Users/jolisper/Source/Cuis-Smalltalk-MCP-Bridge/initiatives/cuis-image-manager/research/probes/q17/../q15/busy-40.st . ' arguments: ' . #()}
+2026-11-11T00:46:58.617 process:40 2089524 BUSY at 40
+2026-11-11T00:47:01.390 process:60 3916122 
+2026-11-11T00:47:01.391 process:60 3916122 ----QUIT----(11 November 2026 00:47:01) Cuis7.8.image priorSource: 4308

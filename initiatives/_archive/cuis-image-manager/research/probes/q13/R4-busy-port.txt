@@ -1,0 +1,6 @@
+nc pid=24919 vm pid=24932
+listeners on 17901:
+  nc 24919 127.0.0.1:17901
+  Squeak 24932 *:17901
+vm cpu:   1.7
+vm tcp sockets: TCP *:17901 (LISTEN);

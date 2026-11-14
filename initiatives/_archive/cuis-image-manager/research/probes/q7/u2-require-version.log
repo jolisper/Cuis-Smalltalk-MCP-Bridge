@@ -1,0 +1,8 @@
+2026-11-10 12:42:19.230 Squeak[4587:10330258] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/1w/b8zpgv1d0rndvghy9hjwnrk80000gn/T/org.squeak.Squeak.savedState
+2026-11-10T12:42:19.476 process:40 3330712 {'Compiler evaluate contents of file named: ' . '/private/tmp/claude-501/-Users-jolisper-Source-Cuis-Smalltalk-MCP-Bridge/4a067712-58f9-49e9-ab4d-65ce3b79ebe4/scratchpad/q7/u2-require-version.st' . ' -> ' . /private/tmp/claude-501/-Users-jolisper-Source-Cuis-Smalltalk-MCP-Bridge/4a067712-58f9-49e9-ab4d-65ce3b79ebe4/scratchpad/q7/u2-require-version.st . ' arguments: ' . #()}
+2026-11-10T12:42:19.481 process:40 3330712 PROBE editing existing method Json>>ctorMap
+2026-11-10T12:42:19.486 process:40 3330712 PROBE before reload: provides=Feature(JSON 1.30) unsaved=true
+2026-11-10T12:42:19.487 process:40 3330712 PROBE after reload: provides=Feature(JSON 1.30) unsaved=true
+2026-11-10T12:42:19.488 process:40 3330712 PROBE probeSharedWrite (from file) present=false
+2026-11-10T12:42:19.490 process:40 3330712 PROBE probeLocalOnly (local, not in file) present=true
+2026-11-10T12:42:19.491 process:40 3330712 PROBE edited method still local=true

@@ -1,0 +1,2 @@
+busy: ready_file=absent cpu=98.7
+ctl: ready_file=present cpu=1.6
