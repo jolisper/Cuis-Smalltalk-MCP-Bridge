@@ -1,6 +1,6 @@
 ---
 name: run-cuisctl
-description: Drive the built cuisctl CLI (create, status, start, stop, reset and destroy) against a live throwaway home, not its test suite. Use when asked to run, exercise or verify cuisctl for real, for example from /spec-verify-dynamic.
+description: Drive the built cuisctl CLI (create, status, start, stop, reset, destroy and run) against a live throwaway home, not its test suite. Use when asked to run, exercise or verify cuisctl for real, for example from /spec-verify-dynamic.
 ---
 
 Drive `cuisctl/dist/cli.js` directly. All paths are relative to the repo root. Always set
@@ -9,7 +9,7 @@ Drive `cuisctl/dist/cli.js` directly. All paths are relative to the repo root. A
 
 ## Prerequisites
 
-- macOS (`create`, `start`, `stop`, `reset`, `destroy` fail with `unsupported_platform` elsewhere; `status` runs anywhere).
+- macOS (`create`, `start`, `stop`, `reset`, `destroy`, `run` fail with `unsupported_platform` elsewhere; `status` runs anywhere).
 - Node >= 20.
 - Network access for the first `create` (downloads the pinned Cuis archive, ~30 MB).
 - Built CLI: `cd cuisctl && npm install && npm run build` (so `cuisctl/dist/cli.js` exists). Rebuild after any source change.
@@ -100,6 +100,67 @@ Error paths: `$C reset nope` and `$C destroy nope --yes` are `not_found` (1); `$
 and `$C reset demo --save` are `usage` (2). To see that `reset` keeps user files, put a file in
 `"$CUISCTL_HOME/instances/demo/files"` before `reset`: it is still there afterwards.
 
+### Run (evaluate code)
+
+`run` needs a stopped instance, boots it headless (the default; never pass `--gui`), evaluates the
+code and restores the image. Each run boots a real VM (a few seconds). Use `--json` to read
+fields; add `; echo "exit=$?"` to see exit codes.
+
+```bash
+$C create demo                                  # if not created yet
+$C run demo '3 + 4'                             # "demo: passed (<n> ms)", "  saved: no", "result: 7"; exit 0
+$C run demo '3 + 4' --json                      # {"ok":true,"command":"run","data":{"status":"passed","result":"7",...,"saved":false,"detached":false}}
+echo '3 + 4' > "$CUISCTL_HOME/t.st"; $C run demo --file "$CUISCTL_HOME/t.st"   # result 7
+echo '3 + 4' | $C run demo --stdin              # result 7
+$C run demo --stdin < /dev/null                 # usage (blank code), exit 2; from a terminal --stdin is usage too
+$C run demo '1/0' --json; echo "exit=$?"        # exit 1, error.kind run_failed, data.status failed, data.error set
+$C run demo '3 +' --json                        # run_failed, data.error "syntax error"
+$C run demo '[true] whileTrue' --timeout 2 --json   # exit 1, run_timed_out, data.status timed_out (~2 s of code); VM killed
+$C run demo -- '-3 abs'                         # dash-leading code needs --; result 3
+$C status demo                                  # stopped after every run, except --detach
+```
+
+Output and result:
+```bash
+$C run demo "Transcript show: 'one'; newLine. Transcript show: 'two'; newLine. 5"   # output block "one" then "two" (in order, no Transcript timestamp prefixes), result 5
+$C run demo "1 to: 400000 do: [:i | Transcript show: 'flood line ', i printString; newLine]. 1" --timeout 120 --json
+   # ~10 MB: outputTruncated true, output ~64 KB (16 KB head + 48 KB tail), outputBytes > 10 MB (raw, counts line prefixes)
+```
+
+Disposable vs `--save`:
+```bash
+$C run demo "Object subclass: #ZzKeepProbe instanceVariableNames: '' classVariableNames: '' poolDictionaries: '' category: 'Probe'. 1"
+$C run demo "Smalltalk includesKey: #ZzKeepProbe"        # result false (disposable: change was discarded)
+$C run demo --save "Object subclass: #ZzKeepProbe instanceVariableNames: '' classVariableNames: '' poolDictionaries: '' category: 'Probe'. 1"   # saved: yes
+$C run demo "Smalltalk includesKey: #ZzKeepProbe"        # result true
+$C reset demo                                            # back to pristine
+```
+If `--save` ends `not_saved` (exit 1), the run document is still printed; report it.
+
+Files outside the image persist: `$C run demo "'/abs/path/of/files/x.txt' asFullFileEntry forceWriteStreamDo: [:s | s nextPutAll: 'hi']. 1"` with the
+instance's `files/` folder leaves the file there after the run.
+
+`--detach`, locking and refusals:
+```bash
+$C run demo --detach '3 + 4'    # passed, "  detached: yes"; VM left running
+$C status demo                        # running (pid, mode headless)
+$C run demo '1'                       # instance_running, hint "cuisctl stop demo", exit 1
+$C stop demo
+$C run demo '(Delay forSeconds: 8) wait. 1' & sleep 3; $C run demo '1'; wait   # second one: busy (lock), exit 1; first passes
+```
+
+Usage errors, all exit 2 and nothing is booted: `$C run demo` (no source); `$C run demo '1' --file x`
+(two sources); `--timeout 0`, `--timeout abc`, `--timeout 301`; `--save --detach`;
+`--headless --gui`.
+
+Interruption: run a long job in the background and send SIGINT to the cuisctl process (not the VM):
+```bash
+node cuisctl/dist/cli.js run demo '(Delay forSeconds: 30) wait. 1' --json > "$CUISCTL_HOME/out.json" & P=$!
+sleep 8; kill -INT $P; wait $P; echo "exit=$?"     # exit 1, error.kind interrupted
+$C status demo                                     # stopped; image restored; no stray VM
+```
+(Use `node ... &` directly so `$!` is the cuisctl process, not a shell.)
+
 ## Stop / cleanup
 
 Always stop every instance you started, then delete the throwaway directory:
@@ -116,5 +177,6 @@ rm -rf "$(dirname "$CUISCTL_HOME")"
 - `reset` never prepares a missing home (`home_not_ready`, hint `cuisctl start <name>`); run `create` first.
 - A `start` that returns means the VM is still running: never leave without `stop`, or the VM and port 6789 stay taken.
 - Never kill a process on 6789 by hand-guess; `cuisctl` itself refuses to touch non-instance processes.
+- `run` is headless-only here: never pass `--gui`. It refuses a running instance, so `stop` first; a `--detach` run leaves a VM you must `stop`.
 - Plain `stop` is SIGKILL (not saved); use `stop --save` to keep state. `start` can take up to 60 s before `start_failed`.
 - The unit tests (`cd cuisctl && npm test`) are a different thing; this skill drives the built CLI.

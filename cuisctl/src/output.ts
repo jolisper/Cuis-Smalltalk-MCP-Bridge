@@ -4,6 +4,10 @@
  * A command produces a single `Result`. The process exit code and the JSON
  * and text renderings are all pure functions of it, so the reported outcome
  * and the exit code cannot disagree.
+ *
+ * A failure normally carries only an `error`. A failed `run` also sets
+ * `command: 'run'` and the `RunView` in `data`, so the run document is still
+ * reported.
  */
 
 import type { DestroyView } from './commands/destroy.js';
@@ -13,8 +17,27 @@ import type { StopView } from './commands/stop.js';
 import type { ErrorKind } from './errors.js';
 
 export type Result =
-  | { ok: true; command: string; data: unknown }
-  | { ok: false; error: { kind: ErrorKind; message: string; hint?: string } };
+  | { ok: true; command: string; data: unknown; error?: undefined }
+  | {
+      ok: false;
+      command?: 'run';
+      error: { kind: ErrorKind; message: string; hint?: string };
+      data?: RunView;
+    };
+
+export interface RunView {
+  name: string;
+  status: 'passed' | 'failed' | 'timed_out';
+  elapsedMs: number;
+  output: string;
+  outputBytes: number;
+  outputTruncated: boolean;
+  result?: string;
+  resultTruncated: boolean;
+  error?: string;
+  saved: boolean;
+  detached: boolean;
+}
 
 /**
  * Maps a `Result` to a process exit code: 0 on success, 2 on a usage error,
@@ -44,11 +67,18 @@ export function renderJson(result: Result): string {
  * "<name>: already stopped". A `reset` result renders "<name>: reset to the
  * pristine base (Cuis <key>); user files kept" followed by paths. A `destroy`
  * result renders "<name>: destroyed (removed <folder>, including its user
- * files)". Results of unknown commands are not rendered and produce an empty
- * string.
+ * files)". A `run` result renders "<name>: <status> (<elapsed> ms)" (status is
+ * passed, failed or timed out), then "  saved: yes|no", then
+ * "  detached: yes" when the instance was left running, then the captured
+ * output as an "output:" block (omitted when empty, followed by an
+ * "[output truncated: <n> bytes in total]" note when it was cut), and finally
+ * "result: <value>" (with " [truncated]" when cut) or "error: <message>" when
+ * the run failed. A failure that carries `data` (a run that failed or timed
+ * out) renders only that run document, not the `error:`/`hint:` lines.
+ * Results of unknown commands are not rendered and produce an empty string.
  */
 export function renderText(result: Result): string {
-  if (!result.ok) return renderError(result.error);
+  if (!result.ok) return result.data === undefined ? renderError(result.error) : renderRun(result.data);
   switch (result.command) {
     case 'create':
       return renderCreate(result.data as InstanceView);
@@ -64,9 +94,29 @@ export function renderText(result: Result): string {
       return renderReset(result.data as InstanceView);
     case 'destroy':
       return renderDestroy(result.data as DestroyView);
+    case 'run':
+      return renderRun(result.data as RunView);
     default:
       return '';
   }
+}
+
+function renderRun(view: RunView): string {
+  const status = view.status === 'timed_out' ? 'timed out' : view.status;
+  const detached = view.detached ? '  detached: yes\n' : '';
+  const truncationNote =
+    view.outputTruncated ? `[output truncated: ${view.outputBytes} bytes in total]\n` : '';
+  const output = view.output === '' ? '' : `output:\n${view.output}\n${truncationNote}`;
+  const resultTruncation = view.resultTruncated ? ' [truncated]' : '';
+  const outcome =
+    view.error === undefined ? `result: ${view.result}${resultTruncation}\n` : `error: ${view.error}\n`;
+  return (
+    `${view.name}: ${status} (${view.elapsedMs} ms)\n` +
+    `  saved: ${view.saved ? 'yes' : 'no'}\n` +
+    detached +
+    output +
+    outcome
+  );
 }
 
 function renderStop(view: StopView): string {

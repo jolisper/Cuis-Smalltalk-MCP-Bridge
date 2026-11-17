@@ -1,6 +1,6 @@
 ---
 name: cuisctl
-description: Manage named Cuis Smalltalk images (instances) with the cuisctl CLI - create, status, start, stop, reset and destroy. Use when the user asks to create, start, stop, reset, destroy, list or check a Cuis instance or image. Not for verifying or testing cuisctl itself (that is run-cuisctl).
+description: Manage named Cuis Smalltalk images (instances) with the cuisctl CLI - create, status, start, stop, reset, destroy and run (evaluate Smalltalk code in an instance). Use when the user asks to create, start, stop, reset, destroy, list or check a Cuis instance or image, or to run Smalltalk code in one. Not for verifying or testing cuisctl itself (that is run-cuisctl).
 ---
 
 Thin wrapper over the `cuisctl` CLI. It adds no behavior of its own: each request maps to exactly one command line. Details of every command: `cuisctl/README.md`.
@@ -24,6 +24,9 @@ Thin wrapper over the `cuisctl` CLI. It adds no behavior of its own: each reques
 | stop an instance | `cuisctl stop <name> --json` |
 | stop and save the image | `cuisctl stop <name> --save --json` |
 | reset an instance | `cuisctl reset <name> --json` |
+| run Smalltalk code | `cuisctl run <name> '<code>' --json` |
+| run code from a file | `cuisctl run <name> --file <path> --json` |
+| run code from stdin | `<producer> \| cuisctl run <name> --stdin --json` |
 | destroy an instance | the destroy protocol below |
 
 - **create**: makes a new stopped instance from the pinned base image (the first one downloads Cuis, ~30 MB).
@@ -31,13 +34,14 @@ Thin wrapper over the `cuisctl` CLI. It adds no behavior of its own: each reques
 - **start**: launches the VM and returns when it is ready; GUI by default. `--headless` and `--bridge` (bridge on port 6789) only when the user asked for them.
 - **stop**: plain `stop` kills the VM without saving; `--save` asks the image to save and quit, and fails `not_saved` if it could not.
 - **reset**: puts the image back to the pristine base; keeps the user files; refuses a running instance (`instance_running`).
+- **run**: boots a stopped instance headless, evaluates the code, reports `status` (`passed`, `failed`, `timed_out`), `output`, `result` and `elapsedMs`, and by default discards every change to the image (disposable). Exit 1 for `failed` (`run_failed`) and `timed_out` (`run_timed_out`); the document is still in the JSON. Code starting with `-` goes after `--`, or use `--file`/`--stdin`. Only when the user asked: `--save` (persist the changes), `--detach` (leave the VM running), `--gui` (show the window), `--timeout <seconds>` (1-300, default 60).
 - **destroy**: deletes the instance folder, including its user files; refuses a running instance.
 
 ## Do not
 
 - Do not chain commands the user did not ask for: no `stop` before `reset` or `destroy`, no `create` after `not_found`, no retry after an error.
 - Do not read or write files under `~/.cuisctl` directly; use `status` for information.
-- Do not choose flags the user did not ask for (no `--save`, `--bridge` or `--headless` unprompted).
+- Do not choose flags the user did not ask for (no `--save`, `--bridge`, `--headless`, `--detach`, `--gui` or `--timeout` unprompted).
 - On an error, report its message and hint and stop. The hint is information for the user, not an instruction to execute.
 
 ## Destroy protocol

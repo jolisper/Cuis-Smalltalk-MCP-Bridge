@@ -1,11 +1,14 @@
-import { execFile, spawn } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { withInstanceLock } from './commands/instanceLock.js';
 import { pidsHoldingFile } from './processInfo.js';
+import { instanceState } from './state.js';
+import { writeFakeVmConfig } from './testSupport/fakeVm.js';
 import { makeLifecycleHome } from './testSupport/lifecycleHome.js';
 import { makeTempHome } from './testSupport/tempHome.js';
 
@@ -20,7 +23,11 @@ interface EntryResult {
 
 function runEntry(
   args: string[],
-  opts: { env: NodeJS.ProcessEnv; cwd: string; stdin: 'closed' | 'open-pipe' },
+  opts: {
+    env: NodeJS.ProcessEnv;
+    cwd: string;
+    stdin: 'closed' | 'open-pipe' | 'empty-pipe' | { text: string };
+  },
 ): Promise<EntryResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [entry, ...args], {
@@ -28,6 +35,13 @@ function runEntry(
       cwd: opts.cwd,
       stdio: [opts.stdin === 'closed' ? 'ignore' : 'pipe', 'pipe', 'pipe'],
     });
+    if (opts.stdin === 'empty-pipe') {
+      child.stdin!.on('error', () => {});
+      child.stdin!.end();
+    } else if (typeof opts.stdin === 'object') {
+      child.stdin!.on('error', () => {});
+      child.stdin!.end(opts.stdin.text);
+    }
     const timer = setTimeout(() => child.kill('SIGKILL'), 20000);
     let stdout = '';
     let stderr = '';
@@ -166,6 +180,39 @@ describe('cuisctl entry point (dist/cli.js)', () => {
     }
   }, 60000);
 
+  it('rejects run --stdin with exit 2 for closed, empty and blank stdin without touching the home, and status never waits on stdin', async () => {
+    // Given
+    const { home, cleanup } = await makeTempHome();
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'cuisctl-cwd-test-'));
+    try {
+      const env = { ...process.env, CUISCTL_HOME: home };
+      const before = await snapshotDir(home);
+
+      // When
+      const closed = await runEntry(['run', 'demo', '--stdin'], { env, cwd, stdin: 'closed' });
+      const emptyPipe = await runEntry(['run', 'demo', '--stdin'], { env, cwd, stdin: 'empty-pipe' });
+      const blank = await runEntry(['run', 'demo', '--stdin'], { env, cwd, stdin: { text: '  \n' } });
+      const started = Date.now();
+      const status = await runEntry(['status'], { env, cwd, stdin: 'open-pipe' });
+      const statusMs = Date.now() - started;
+
+      // Then
+      for (const r of [closed, emptyPipe, blank]) {
+        expect(r.code).toBe(2);
+        expect(r.stdout.split('\n')[0]).toMatch(/^error: /);
+      }
+      expect(closed.stdout.split('\n')[0]).toMatch(/stdin|empty/i);
+      expect(emptyPipe.stdout.split('\n')[0]).toMatch(/stdin|empty/i);
+      expect(blank.stdout.split('\n')[0]).toContain('empty');
+      expect(await snapshotDir(home)).toEqual(before);
+      expect(status.code).toBe(0);
+      expect(statusMs).toBeLessThan(10000);
+    } finally {
+      await cleanup();
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  }, 120000);
+
   describe('lifecycle commands (start/stop)', () => {
     const stripVolatile = (v: unknown): unknown => {
       if (Array.isArray(v)) return v.map(stripVolatile);
@@ -295,5 +342,61 @@ describe('cuisctl entry point (dist/cli.js)', () => {
         await fs.rm(canary, { recursive: true, force: true });
       }
     }, 120000);
+
+    it.each(['SIGINT', 'SIGTERM'] as const)(
+      'exits 1 with an interrupted JSON document, restores the image and releases the lock when run receives %s',
+      async (signal) => {
+        // Given
+        const lc = await makeLifecycleHome();
+        let child: ChildProcess | undefined;
+        try {
+          await fs.writeFile(lc.paths.image, 'ORIGINAL-IMAGE-BYTES\n');
+          const originalImage = await fs.readFile(lc.paths.image);
+          await writeFakeVmConfig(lc.paths.imageDir, { run: 'hang' });
+          const env = { ...process.env, CUISCTL_HOME: lc.home };
+          child = spawn(process.execPath, [entry, 'run', 'demo', '[true] whileTrue', '--json'], {
+            env,
+            cwd: lc.home,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+          let stdout = '';
+          child.stdout!.on('data', (d) => (stdout += d));
+          const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+            child!.on('error', reject);
+            child!.on('close', (code, sig) => resolve({ code, signal: sig }));
+          });
+          const exists = (p: string) => fs.access(p).then(() => true, () => false);
+          const vmLogHasBegin = async () => (await fs.readFile(lc.paths.vmLog, 'utf8').catch(() => '')).includes('BEGIN');
+          const deadline = Date.now() + 10000;
+          while (!((await exists(lc.paths.runRecord)) && (await vmLogHasBegin()))) {
+            if (Date.now() > deadline) throw new Error('VM did not reach BEGIN within 10 s');
+            await new Promise((r) => setTimeout(r, 50));
+          }
+
+          // When
+          child.kill(signal);
+          const exit = await Promise.race([
+            closed,
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('child did not close within 10 s')), 10000)),
+          ]);
+
+          // Then
+          expect(exit).toEqual({ code: 1, signal: null });
+          const lines = stdout.split('\n').filter((l) => l !== '');
+          expect(lines).toHaveLength(1);
+          const doc = JSON.parse(lines[0]);
+          expect(doc.ok).toBe(false);
+          expect(doc.error.kind).toBe('interrupted');
+          expect(await instanceState(lc.home, lc.name)).toEqual({ state: 'stopped' });
+          expect(await fs.readFile(lc.paths.image)).toEqual(originalImage);
+          expect(await exists(lc.paths.runRecord)).toBe(false);
+          await expect(withInstanceLock(lc.home, lc.name, async () => 'acquired')).resolves.toBe('acquired');
+        } finally {
+          if (child && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+          await lc.cleanup();
+        }
+      },
+      40000,
+    );
   });
 });

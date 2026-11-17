@@ -132,6 +132,10 @@ describe('cuisctl paths', () => {
       runRecord: path.join(d, 'run.json'),
       startScript: path.join(d, 'start.st'),
       readyFile: path.join(d, 'ready'),
+      runScript: path.join(d, 'run.st'),
+      runCode: path.join(d, 'run-code.st'),
+      runOutcome: path.join(d, 'run-outcome'),
+      runBackup: path.join(d, 'run-backup'),
     });
   });
 
