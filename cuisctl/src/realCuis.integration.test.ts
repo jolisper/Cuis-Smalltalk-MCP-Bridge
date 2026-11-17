@@ -10,8 +10,10 @@ import { promisify } from 'node:util';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { runDestroy } from './commands/destroy.js';
 import { runReset } from './commands/reset.js';
+import { runRun } from './commands/run.js';
 import { runStart } from './commands/start.js';
 import type { StartView } from './commands/start.js';
+import type { RunView } from './output.js';
 import { runStatus } from './commands/status.js';
 import { runStop } from './commands/stop.js';
 import type { StopView } from './commands/stop.js';
@@ -586,6 +588,208 @@ describe.skipIf(process.env.CUISCTL_REAL_CUIS !== '1' || process.platform !== 'd
         for (const { home: h, name } of created) expect(await pidsHoldingFile(instancePaths(h, name).changes)).toEqual([]);
         expect((await listInstances(home)).length).toBeGreaterThan(0);
       });
+    });
+
+    // ---- `run` on real headless VMs (never --gui). Each case uses its own fresh instance. ----
+    describe('run (real VM)', () => {
+      let seq = 0;
+      const created: string[] = [];
+      const AUTHOR = "Utilities setAuthorName: 'Test' initials: 'tst'.\n";
+      const sha = async (file: string) => createHash('sha256').update(await fs.readFile(file)).digest('hex');
+
+      async function fresh(): Promise<string> {
+        const name = `rn${++seq}`;
+        await createInstance({ home, name });
+        created.push(name);
+        return name;
+      }
+
+      async function go(name: string, code: string, extra: { timeoutSeconds?: number; timeoutMs?: number; save?: boolean } = {}) {
+        const result = await runRun({
+          home,
+          name,
+          code,
+          timeoutSeconds: 60,
+          headless: true,
+          onProgress: () => {},
+          startTimeoutMs: START_TIMEOUT_MS,
+          ...extra,
+        });
+        const data = result.data as RunView;
+        expect(data, JSON.stringify(result)).toBeDefined();
+        return { result, data };
+      }
+
+      async function expectDead(name: string) {
+        expect(await pidsHoldingFile(instancePaths(home, name).changes)).toEqual([]);
+        expect(await runStatus({ home, name })).toMatchObject({ ok: true, data: { state: 'stopped' } });
+      }
+
+      async function killAll(): Promise<void> {
+        for (const name of created) {
+          for (const pid of await pidsHoldingFile(instancePaths(home, name).changes).catch(() => [])) {
+            try {
+              process.kill(pid, 'SIGKILL');
+            } catch {
+              // already gone
+            }
+          }
+        }
+      }
+      afterEach(killAll);
+      afterAll(killAll);
+
+      it('6: 3 + 4 passes with result 7, not saved, instance stopped, image unchanged', async () => {
+        const name = await fresh();
+        const before = await sha(instancePaths(home, name).image);
+        const { result, data } = await go(name, '3 + 4');
+        expect(result.ok).toBe(true);
+        expect(data).toMatchObject({ status: 'passed', result: '7', saved: false, detached: false });
+        await expectDead(name);
+        expect(await sha(instancePaths(home, name).image)).toBe(before);
+      }, LIFECYCLE_TIMEOUT_MS);
+
+      it('8: code whose value is nil, or an empty-value statement, gives result nil', async () => {
+        const name = await fresh();
+        expect((await go(name, 'Object new. nil')).data).toMatchObject({ status: 'passed', result: 'nil' });
+        expect((await go(name, 'Object new.')).data).toMatchObject({ status: 'passed' });
+        expect((await go(name, '')).data).toMatchObject({ status: 'passed', result: 'nil' });
+      }, LIFECYCLE_TIMEOUT_MS);
+
+      it('9/14: 1/0 fails promptly with ZeroDivide; Transcript output a then b, in order', async () => {
+        const name = await fresh();
+        const t0 = Date.now();
+        const { result, data } = await go(name, "Transcript show: 'a'; newLine. Transcript show: 'b'; newLine. 1/0", {
+          timeoutMs: 30_000,
+        });
+        expect(data.status, JSON.stringify(data)).toBe('failed');
+        expect(Date.now() - t0).toBeLessThan(30_000 + 15_000); // includes boot
+        expect(data.elapsedMs).toBeLessThan(30_000);
+        expect(result).toMatchObject({ ok: false, error: { kind: 'run_failed' } });
+        expect(data.error).toMatch(/zero|divide/i);
+        const lines = data.output.split('\n').map((l) => l.trimEnd());
+        const a = lines.findIndex((l) => /(^|\s)a$/.test(l));
+        const b = lines.findIndex((l) => /(^|\s)b$/.test(l));
+        expect(a, data.output).toBeGreaterThanOrEqual(0);
+        expect(b, data.output).toBeGreaterThan(a);
+        await expectDead(name);
+      }, LIFECYCLE_TIMEOUT_MS);
+
+      it("9 (extra): an unhandled Error with a message text fails with that text (not 'VM ended')", async () => {
+        const name = await fresh();
+        const { data } = await go(name, "Error signal: 'boom'", { timeoutMs: 30_000 });
+        expect(data).toMatchObject({ status: 'failed', error: 'boom' });
+        await expectDead(name);
+      }, LIFECYCLE_TIMEOUT_MS);
+
+      it("9 (extra): 'nil foo' fails with a doesNotUnderstand/foo error text, not 'nil'", async () => {
+        const name = await fresh();
+        const { data } = await go(name, 'nil foo', { timeoutMs: 30_000 });
+        expect(data.status, JSON.stringify(data)).toBe('failed');
+        expect(data.error).not.toBe('nil');
+        expect(data.error).toMatch(/foo|doesNotUnderstand/i);
+        await expectDead(name);
+      }, LIFECYCLE_TIMEOUT_MS);
+
+      it('10: a syntax error fails promptly with an error description', async () => {
+        const name = await fresh();
+        const { result, data } = await go(name, '3 +');
+        expect(result).toMatchObject({ ok: false, error: { kind: 'run_failed' } });
+        expect(data.status).toBe('failed');
+        expect((data.error ?? '').length).toBeGreaterThan(0);
+        expect(data.elapsedMs).toBeLessThan(30_000);
+        await expectDead(name);
+      }, LIFECYCLE_TIMEOUT_MS);
+
+      it('11: self halt and Halt signal fail promptly (no debugger hang)', async () => {
+        const name = await fresh();
+        for (const code of ['self halt', 'Halt signal', 'Halt new signal: 1']) {
+          const { data } = await go(name, code);
+          expect(data.status, code).toBe('failed');
+          expect(data.elapsedMs, code).toBeLessThan(30_000);
+        }
+        await expectDead(name);
+      }, LIFECYCLE_TIMEOUT_MS);
+
+      it('21: a global defined by a default run is absent in the next; a --save class is visible to the next run', async () => {
+        const dflt = await fresh();
+        const defined = await go(dflt, AUTHOR + 'Smalltalk at: #ZzRunProbe put: 5. Smalltalk at: #ZzRunProbe');
+        expect(defined.data).toMatchObject({ status: 'passed', result: '5' });
+        expect((await go(dflt, 'Smalltalk includesKey: #ZzRunProbe')).data).toMatchObject({ status: 'passed', result: 'false' });
+
+        const keep = await fresh();
+        const cls =
+          AUTHOR +
+          "Object subclass: #ZzKeepProbe instanceVariableNames: '' classVariableNames: '' poolDictionaries: '' category: 'ZzKeep'.\n" +
+          "(Smalltalk at: #ZzKeepProbe) compile: 'answer ^ 42' classified: 'probe'.\n" +
+          'Smalltalk includesKey: #ZzKeepProbe';
+        const kept = await go(keep, cls, { save: true });
+        expect(kept.result, JSON.stringify(kept.result)).toMatchObject({ ok: true });
+        expect(kept.data).toMatchObject({ status: 'passed', result: 'true', saved: true });
+        expect((await go(keep, '(Smalltalk at: #ZzKeepProbe) new answer')).data).toMatchObject({ status: 'passed', result: '42', saved: false });
+        await expectDead(keep);
+      }, LIFECYCLE_TIMEOUT_MS);
+
+      it('15: (Delay forMilliseconds: 300) wait reports elapsedMs >= 300 and < 300 + 20000', async () => {
+        const name = await fresh();
+        const { data } = await go(name, '(Delay forMilliseconds: 300) wait');
+        expect(data.status).toBe('passed');
+        expect(data.elapsedMs).toBeGreaterThanOrEqual(300);
+        expect(data.elapsedMs).toBeLessThan(300 + 20_000);
+      }, LIFECYCLE_TIMEOUT_MS);
+
+      it('12: [true] whileTrue with timeoutMs 3000 gives run_timed_out within ~15 s; VM dead', async () => {
+        const name = await fresh();
+        const t0 = Date.now();
+        const { result, data } = await go(name, '[true] whileTrue', { timeoutMs: 3000 });
+        const total = Date.now() - t0;
+        expect(result).toMatchObject({ ok: false, error: { kind: 'run_timed_out' } });
+        expect(data.status).toBe('timed_out');
+        expect(data.elapsedMs).toBeLessThan(15_000);
+        expect(total).toBeLessThan(45_000); // boot + timeout + kill/restore
+        await expectDead(name);
+      }, LIFECYCLE_TIMEOUT_MS);
+
+      it('16: a 10 MB output flood passes with truncated output (<= 65536) and a healthy process', async () => {
+        const name = await fresh();
+        const p = instancePaths(home, name);
+        const before = await sha(p.image);
+        const line = 'x'.repeat(49);
+        const { data } = await go(
+          name,
+          `1 to: 200000 do: [ :i | Transcript show: '${line}'; newLine ]. 'flooded'`,
+          { timeoutSeconds: 200 },
+        );
+        expect(data.status).toBe('passed');
+        expect(data.result).toBe("'flooded'");
+        expect(data.outputTruncated).toBe(true);
+        expect(data.output.length).toBeLessThanOrEqual(65536);
+        expect(data.outputBytes).toBeGreaterThan(5_000_000);
+        await expectDead(name);
+        expect(await sha(p.image)).toBe(before);
+        expect((await go(name, '3 + 4')).data).toMatchObject({ status: 'passed', result: '7' }); // still healthy
+      }, LIFECYCLE_TIMEOUT_MS);
+
+      it('17: a multi-line, backslash-containing result round-trips through the escaping', async () => {
+        const name = await fresh();
+        const { data } = await go(name, "'a\\b', (String with: Character lf), 'c'");
+        expect(data.status).toBe('passed');
+        expect(data.result).toBe("'a\\b\nc'");
+        expect(data.resultTruncated).toBe(false);
+      }, LIFECYCLE_TIMEOUT_MS);
+
+      it('22: code that quits the VM fails with "VM ended before the code completed"; image restored', async () => {
+        const name = await fresh();
+        const p = instancePaths(home, name);
+        const before = await sha(p.image);
+        const { result, data } = await go(name, 'Smalltalk quitPrimitive');
+        expect(result).toMatchObject({ ok: false, error: { kind: 'run_failed' } });
+        expect(data.status).toBe('failed');
+        expect(data.error).toContain('VM ended before the code completed');
+        await expectDead(name);
+        expect(await sha(p.image)).toBe(before);
+        await expect(fs.access(p.runRecord)).rejects.toThrow();
+      }, LIFECYCLE_TIMEOUT_MS);
     });
 
     it('leaves the home dist/ and base/ unchanged', async () => {

@@ -21,6 +21,10 @@
  *     files/                  instance files
  *     vm.log                  VM output
  *     run.json                record of the running VM
+ *     run.st                  script run inside the instance's image
+ *     run-code.st             code to run, supplied by the caller
+ *     run-outcome             outcome of the last run
+ *     run-backup/             backups of the image and changes files
  *   <home>/tmp/               staging root for `create`, outside instances/
  */
 import os from 'node:os';
@@ -91,6 +95,10 @@ export type InstancePaths = {
   runRecord: string;
   startScript: string;
   readyFile: string;
+  runScript: string;
+  runCode: string;
+  runOutcome: string;
+  runBackup: string;
 };
 
 /** Every path inside the instance named `name`. */
@@ -111,6 +119,10 @@ export function instancePaths(home: string, name: string): InstancePaths {
     runRecord: path.join(dir, 'run.json'),
     startScript: path.join(dir, 'start.st'),
     readyFile: path.join(dir, 'ready'),
+    runScript: path.join(dir, 'run.st'),
+    runCode: path.join(dir, 'run-code.st'),
+    runOutcome: path.join(dir, 'run-outcome'),
+    runBackup: path.join(dir, 'run-backup'),
   };
 }
 

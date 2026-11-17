@@ -44,7 +44,7 @@ export interface StopView {
   reason?: string;
 }
 
-interface StopTarget {
+export interface StopTarget {
   pid: number;
   startTime: string;
   saveOnStop: boolean | undefined;
@@ -91,7 +91,7 @@ async function resolveTarget(opts: StopOptions, state: Exclude<InstanceState, { 
 }
 
 /** Kills the VM and removes its run record: the VM ended without a save. */
-async function killAndForget(opts: StopOptions, target: StopTarget): Promise<void> {
+export async function killAndForget(opts: StopOptions, target: StopTarget): Promise<void> {
   await signalVm(target.pid, target.startTime, 'SIGKILL');
   await waitForExit(target.pid, target.startTime, opts.killWaitMs ?? DEFAULT_KILL_WAIT_MS, opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
   await removeRunRecord(opts.home, opts.name);
@@ -103,7 +103,7 @@ async function stopWithoutSave(opts: StopOptions, target: StopTarget): Promise<R
 }
 
 /** Stops the VM saving the image; throws not_saved when the save did not happen. */
-async function stopWithSave(opts: StopOptions, target: StopTarget): Promise<Result> {
+export async function stopWithSave(opts: StopOptions, target: StopTarget): Promise<Result> {
   if (target.saveOnStop === false) {
     await killAndForget(opts, target);
     throw notSaved.unavailable();

@@ -1,7 +1,8 @@
 /**
  * CLI logic, kept testable: runCli holds argv parsing, the platform gate and
  * command dispatch; cli.ts is the thin process wiring around it.
- * It never reads stdin and never rejects: every failure is a Result.
+ * It reads stdin only through ctx.readStdin, and only for `run --stdin`; it
+ * never rejects: every failure is a Result.
  *
  * Output contract: stdout carries exactly one document (text, or JSON with
  * `--json`); progress goes to stderr through ctx.onProgress. `--json` is
@@ -9,9 +10,16 @@
  * The options terminator `--` ends option parsing, so a name starting with
  * `-` reaches name validation instead of being rejected as an unknown option.
  *
- * Flags: `--json` is global; `--headless` and `--bridge` belong to start,
- * `--save` to stop, `--yes` to destroy. Each command's table entry declares
- * what it accepts.
+ * Flags: `--json` is global. Per command (each table entry declares what it
+ * accepts; anything else is an unknown option):
+ *   run:     --file, --timeout, --gui (or --headless, the default), --save,
+ *            --detach, --stdin; the code is a second positional
+ *            (`run <name> <code>`) unless --file or --stdin supplies it
+ *   start:   --headless, --bridge
+ *   stop:    --save
+ *   destroy: --yes
+ *   create, status, reset: none
+ * FLAG_OPTION is the single mapping from Flags keys to CLI option names.
  *
  * `execute` checks in this order, and the first failure wins:
  *   1. parse: malformed argv or unknown option
@@ -19,13 +27,16 @@
  *   3. platform gate: macOS-only commands fail elsewhere
  *   4. flag check: a flag the command does not accept is an unknown option
  *   5. argument validation: name present (unless optional), no extras
+ *      (`run` takes one extra: the code)
  *   6. dispatch: the command's `run` does the work
  * The platform gate precedes validation so nothing runs on an unsupported
  * platform, not even name validation.
  *
  * Test seams: CUISCTL_HOME (read from ctx.env) overrides the home directory;
- * `platform`, `createOptions`, `startOptions` and
- * `stopOptions` are injected by tests, never by cli.ts.
+ * `platform`, `createOptions`, `startOptions`, `stopOptions`, `runOptions` and
+ * `signal` are injected by tests (cli.ts supplies only `signal`, from
+ * SIGINT/SIGTERM); `readStdin` is supplied by cli.ts and replaced by tests.
+ * Only `run --stdin` reads stdin, through ctx.readStdin.
  */
 import { parseArgs } from 'node:util';
 import { runCreate, type CreateOptions } from './commands/create.js';
@@ -34,6 +45,11 @@ import { runStop, type StopOptions } from './commands/stop.js';
 import { runStatus } from './commands/status.js';
 import { runReset } from './commands/reset.js';
 import { runDestroy } from './commands/destroy.js';
+import { runRun, type RunOptions } from './commands/run.js';
+import { resolveRunInput } from './commands/runInput.js';
+import { errorResult } from './commands/errorResult.js';
+import { CuisctlError } from './errors.js';
+import { readFile } from 'node:fs/promises';
 import { resolveHome } from './paths.js';
 import { exitCode, renderJson, renderText, type Result } from './output.js';
 
@@ -44,6 +60,9 @@ export interface CliContext {
   createOptions?: Partial<CreateOptions>;
   startOptions?: Partial<StartOptions>;
   stopOptions?: Partial<StopOptions>;
+  runOptions?: Partial<RunOptions>;
+  readStdin?: () => Promise<{ text: string; isTTY: boolean }>;
+  signal?: AbortSignal;
 }
 
 interface Flags {
@@ -51,7 +70,14 @@ interface Flags {
   bridge: boolean;
   save: boolean;
   yes: boolean;
+  gui: boolean;
+  detach: boolean;
+  stdin: boolean;
+  file?: string;
+  timeout?: string;
 }
+
+type BooleanFlag = Exclude<keyof Flags, 'file' | 'timeout'>;
 
 /** A command's table entry: the flags it accepts, whether it works off macOS, and its work. */
 interface Command {
@@ -60,9 +86,16 @@ interface Command {
   /** Works on any platform; commands without this need macOS. */
   platformFree?: true;
   /** Receives the validated instance name (if any) and the parsed flags. */
-  run: (name: string | undefined, ctx: CliContext, flags: Flags) => Promise<Result>;
+  run: (
+    name: string | undefined,
+    ctx: CliContext,
+    flags: Flags,
+    extras: string[],
+  ) => Promise<Result>;
   /** The name is optional (default: required). */
   nameOptional?: true;
+  /** How many positionals beyond the name the command takes (default 0). */
+  maxArgs?: number;
 }
 
 /** Declarative command table; key order is the order shown in the usage hint. */
@@ -110,7 +143,57 @@ const COMMANDS: Record<string, Command> = {
     run: async (name, ctx, flags) =>
       runDestroy({ home: homeFrom(ctx), name: name as string, yes: flags.yes }),
   },
+  run: {
+    accepts: ['file', 'gui', 'headless', 'save', 'detach', 'stdin', 'timeout'],
+    maxArgs: 1,
+    run: handleRun,
+  },
 };
+
+/** The `run` command: resolves code and timeout from the inputs, then runs the code in the instance. */
+async function handleRun(
+  name: string | undefined,
+  ctx: CliContext,
+  flags: Flags,
+  extras: string[],
+): Promise<Result> {
+  try {
+    const { code, timeoutSeconds } = await resolveRunInput(
+      {
+        ...(extras[0] === undefined ? {} : { code: extras[0] }),
+        stdin: flags.stdin,
+        headless: flags.headless,
+        gui: flags.gui,
+        save: flags.save,
+        detach: flags.detach,
+        ...(flags.file === undefined ? {} : { file: flags.file }),
+        ...(flags.timeout === undefined ? {} : { timeout: flags.timeout }),
+      },
+      {
+        readStdin:
+          ctx.readStdin ??
+          (async () => {
+            throw new CuisctlError('usage', 'stdin is not available');
+          }),
+        readFile: (path) => readFile(path, 'utf8'),
+      },
+    );
+    return await runRun({
+      home: homeFrom(ctx),
+      name: name as string,
+      code,
+      timeoutSeconds,
+      headless: !flags.gui,
+      save: flags.save,
+      detach: flags.detach,
+      onProgress: ctx.onProgress,
+      ...(ctx.signal === undefined ? {} : { signal: ctx.signal }),
+      ...ctx.runOptions,
+    });
+  } catch (error) {
+    return errorResult(error);
+  }
+}
 
 const OPTIONS = {
   json: { type: 'boolean' },
@@ -118,7 +201,25 @@ const OPTIONS = {
   bridge: { type: 'boolean' },
   save: { type: 'boolean' },
   yes: { type: 'boolean' },
+  file: { type: 'string' },
+  timeout: { type: 'string' },
+  gui: { type: 'boolean' },
+  detach: { type: 'boolean' },
+  stdin: { type: 'boolean' },
 } as const;
+
+/** The one place mapping each Flags key to its CLI option name (kebab-case). */
+const FLAG_OPTION = {
+  headless: 'headless',
+  bridge: 'bridge',
+  save: 'save',
+  yes: 'yes',
+  gui: 'gui',
+  detach: 'detach',
+  stdin: 'stdin',
+  file: 'file',
+  timeout: 'timeout',
+} as const satisfies Record<keyof Flags, keyof typeof OPTIONS>;
 
 interface ParsedCli {
   command?: string;
@@ -137,15 +238,23 @@ function parseCli(argv: string[]): ParsedCli | { error: string } {
       options: OPTIONS,
     });
     const [command, ...args] = positionals;
+    const on = (flag: BooleanFlag): boolean => values[FLAG_OPTION[flag]] === true;
+    const file = values[FLAG_OPTION.file];
+    const timeout = values[FLAG_OPTION.timeout];
     return {
       ...(command !== undefined ? { command } : {}),
       args,
       json: values.json === true,
       flags: {
-        headless: values.headless === true,
-        bridge: values.bridge === true,
-        save: values.save === true,
-        yes: values.yes === true,
+        headless: on('headless'),
+        bridge: on('bridge'),
+        save: on('save'),
+        yes: on('yes'),
+        gui: on('gui'),
+        detach: on('detach'),
+        stdin: on('stdin'),
+        ...(file !== undefined ? { file } : {}),
+        ...(timeout !== undefined ? { timeout } : {}),
       },
     };
   } catch (error) {
@@ -180,13 +289,14 @@ async function execute(parsed: ParsedCli | { error: string }, ctx: CliContext): 
     };
   }
   const rejected = (Object.keys(flags) as (keyof Flags)[]).find(
-    (flag) => flags[flag] && !entry.accepts.includes(flag),
+    (flag) =>
+      flags[flag] !== undefined && flags[flag] !== false && !entry.accepts.includes(flag),
   );
-  if (rejected !== undefined) return usage(`unknown option: --${rejected}`);
+  if (rejected !== undefined) return usage(`unknown option: --${FLAG_OPTION[rejected]}`);
   const [name, ...extras] = args;
   if (name === undefined && entry.nameOptional !== true) return usage('missing instance name');
-  if (extras.length > 0) return usage('too many arguments');
-  return entry.run(name, ctx, flags);
+  if (extras.length > (entry.maxArgs ?? 0)) return usage('too many arguments');
+  return entry.run(name, ctx, flags, extras);
 }
 
 /** The cuisctl home directory: CUISCTL_HOME from the context env, else the default. */

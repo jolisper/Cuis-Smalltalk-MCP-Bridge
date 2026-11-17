@@ -24,6 +24,9 @@ export type ErrorKind =
   | 'not_saved'
   | 'confirmation_required'
   | 'home_not_ready'
+  | 'run_failed'
+  | 'run_timed_out'
+  | 'interrupted'
   | 'internal_error';
 
 export class CuisctlError extends Error {

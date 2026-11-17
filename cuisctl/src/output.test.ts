@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { exitCode, renderJson, renderText } from './output.js';
+import type { RunView } from './output.js';
 
 describe('exitCode', () => {
   it('is 0 for a successful result', () => {
@@ -393,5 +394,203 @@ describe('renderText', () => {
         '',
       ].join('\n'),
     );
+  });
+
+  it('renders a run result as a status line, saved flag and result line', () => {
+    // Given
+    const data: RunView = {
+      name: 'demo',
+      status: 'passed',
+      elapsedMs: 12,
+      output: '',
+      outputBytes: 0,
+      outputTruncated: false,
+      result: '7',
+      resultTruncated: false,
+      saved: false,
+      detached: false,
+    };
+    const result = { ok: true, command: 'run', data } as const;
+
+    // When
+    const text = renderText(result);
+
+    // Then
+    expect(text).toBe('demo: passed (12 ms)\n  saved: no\nresult: 7\n');
+  });
+
+  it('renders a run result with captured output as an "output:" block before the result line', () => {
+    // Given
+    const data: RunView = {
+      name: 'demo',
+      status: 'passed',
+      elapsedMs: 12,
+      output: 'hello\nworld',
+      outputBytes: 11,
+      outputTruncated: false,
+      result: '7',
+      resultTruncated: false,
+      saved: false,
+      detached: false,
+    };
+    const result = { ok: true, command: 'run', data } as const;
+
+    // When
+    const text = renderText(result);
+
+    // Then
+    expect(text).toBe('demo: passed (12 ms)\n  saved: no\noutput:\nhello\nworld\nresult: 7\n');
+  });
+
+  it('renders a truncated-output notice with the total byte count after the output block', () => {
+    // Given
+    const data: RunView = {
+      name: 'demo',
+      status: 'passed',
+      elapsedMs: 12,
+      output: 'head...tail',
+      outputBytes: 70000,
+      outputTruncated: true,
+      result: '7',
+      resultTruncated: false,
+      saved: false,
+      detached: false,
+    };
+    const result = { ok: true, command: 'run', data } as const;
+
+    // When
+    const text = renderText(result);
+
+    // Then
+    expect(text).toBe(
+      'demo: passed (12 ms)\n  saved: no\noutput:\nhead...tail\n[output truncated: 70000 bytes in total]\nresult: 7\n',
+    );
+  });
+
+  it('renders a "[truncated]" marker after the result when the result was truncated', () => {
+    // Given
+    const data: RunView = {
+      name: 'demo',
+      status: 'passed',
+      elapsedMs: 12,
+      output: '',
+      outputBytes: 0,
+      outputTruncated: false,
+      result: 'abc',
+      resultTruncated: true,
+      saved: false,
+      detached: false,
+    };
+    const result = { ok: true, command: 'run', data } as const;
+
+    // When
+    const text = renderText(result);
+
+    // Then
+    expect(text).toBe('demo: passed (12 ms)\n  saved: no\nresult: abc [truncated]\n');
+  });
+
+  it('renders a failed run result as the run document with a trailing "error:" line and no extra error line', () => {
+    // Given
+    const data: RunView = {
+      name: 'demo',
+      status: 'failed',
+      elapsedMs: 5,
+      output: '',
+      outputBytes: 0,
+      outputTruncated: false,
+      resultTruncated: false,
+      error: 'ZeroDivide',
+      saved: false,
+      detached: false,
+    };
+    const result = {
+      ok: false,
+      command: 'run',
+      error: { kind: 'run_failed', message: 'ZeroDivide' },
+      data,
+    } as const;
+
+    // When
+    const text = renderText(result);
+
+    // Then
+    expect(text).toBe('demo: failed (5 ms)\n  saved: no\nerror: ZeroDivide\n');
+  });
+
+  it('renders a timed-out run result with "timed out" in the status line', () => {
+    // Given
+    const data: RunView = {
+      name: 'demo',
+      status: 'timed_out',
+      elapsedMs: 60000,
+      output: '',
+      outputBytes: 0,
+      outputTruncated: false,
+      resultTruncated: false,
+      error: 'code did not finish within 60 s',
+      saved: false,
+      detached: false,
+    };
+    const result = {
+      ok: false,
+      command: 'run',
+      error: { kind: 'run_timed_out', message: 'code did not finish within 60 s' },
+      data,
+    } as const;
+
+    // When
+    const text = renderText(result);
+
+    // Then
+    expect(text).toBe(
+      'demo: timed out (60000 ms)\n  saved: no\nerror: code did not finish within 60 s\n',
+    );
+  });
+
+  it('renders "saved: yes" for a run result whose image was saved', () => {
+    // Given
+    const data: RunView = {
+      name: 'demo',
+      status: 'passed',
+      elapsedMs: 12,
+      output: '',
+      outputBytes: 0,
+      outputTruncated: false,
+      result: '7',
+      resultTruncated: false,
+      saved: true,
+      detached: false,
+    };
+    const result = { ok: true, command: 'run', data } as const;
+
+    // When
+    const text = renderText(result);
+
+    // Then
+    expect(text).toBe('demo: passed (12 ms)\n  saved: yes\nresult: 7\n');
+  });
+
+  it('renders a "detached: yes" line after the saved line for a run result that left the VM running', () => {
+    // Given
+    const data: RunView = {
+      name: 'demo',
+      status: 'passed',
+      elapsedMs: 12,
+      output: '',
+      outputBytes: 0,
+      outputTruncated: false,
+      result: '7',
+      resultTruncated: false,
+      saved: false,
+      detached: true,
+    };
+    const result = { ok: true, command: 'run', data } as const;
+
+    // When
+    const text = renderText(result);
+
+    // Then
+    expect(text).toBe('demo: passed (12 ms)\n  saved: no\n  detached: yes\nresult: 7\n');
   });
 });

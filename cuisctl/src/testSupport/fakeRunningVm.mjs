@@ -20,6 +20,10 @@ const text = fs.readFileSync(script, 'utf8');
 const readyFile = /"cuisctl-ready: ([^"]*)"/.exec(text)?.[1];
 const portMarker = /"cuisctl-bridge-port: (\w+)"/.exec(text)?.[1] ?? 'none';
 
+const codeFile = /"cuisctl-run-code: ([^"]*)"/.exec(text)?.[1];
+const outcomeFile = /"cuisctl-run-outcome: ([^"]*)"/.exec(text)?.[1];
+const nonce = /"cuisctl-run-nonce: ([^"]*)"/.exec(text)?.[1];
+
 const armed = config.armed !== false;
 
 const signalsLog = path.join(dir, 'signals.log');
@@ -86,7 +90,8 @@ function listen() {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-if (!config.neverReady) {
+const neverReady = config.neverReady || config.run === 'neverReady';
+if (!neverReady) {
   await sleep(config.readyDelayMs ?? 0);
   if (wantBridge) {
     await sleep(config.bridgeDelayMs ?? 0);
@@ -97,5 +102,55 @@ if (!config.neverReady) {
 } else {
   console.log('fake VM: never ready');
 }
+
+const out = (t) => new Promise((r) => process.stdout.write(t, () => r()));
+const esc = (t) => t.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+
+async function writeOutcome(status) {
+  const failed = status === 'failed';
+  const body = [
+    `status=${status}`,
+    `elapsedMs=${config.elapsedMs ?? 5}`,
+    `result=${failed ? '' : esc(String(config.result ?? 'nil'))}`,
+    'resultTruncated=false',
+    `error=${failed ? esc(String(config.error ?? 'ZeroDivide')) : ''}`,
+    'done',
+    '',
+  ].join('\n');
+  fs.writeFileSync(outcomeFile + '.tmp', body);
+  fs.renameSync(outcomeFile + '.tmp', outcomeFile);
+}
+
+async function runCode() {
+  const mode = config.run ?? 'passed';
+  await out(`\n${nonce} BEGIN\n`);
+  if (mode === 'quit') process.exit(0);
+  if (mode === 'hang') {
+    await out('some output before hanging\n');
+    return;
+  }
+  if (mode === 'flood') {
+    let left = config.floodBytes ?? 10_000_000;
+    const line = 'x'.repeat(99) + '\n';
+    while (left > 0) {
+      const chunk = line.repeat(Math.min(Math.ceil(left / 100), 1000)).slice(0, left);
+      left -= chunk.length;
+      await out(chunk);
+    }
+  } else {
+    await out(fs.readFileSync(codeFile, 'utf8'));
+  }
+  await out(`\n${nonce} END\n`);
+  if (mode === 'saveImage') {
+    fs.writeFileSync(image, 'SAVED-BY-RUN\n');
+    fs.writeFileSync(image.replace(/\.image$/, '.changes'), 'SAVED-BY-RUN\n');
+  } else if (mode === 'mutate') {
+    fs.appendFileSync(image, 'MUTATED');
+    fs.appendFileSync(image.replace(/\.image$/, '.changes'), 'MUTATED');
+  }
+  await writeOutcome(mode === 'failed' ? 'failed' : 'passed');
+}
+
+if (!neverReady && codeFile && outcomeFile) await runCode();
 
 setInterval(() => {}, 1000);

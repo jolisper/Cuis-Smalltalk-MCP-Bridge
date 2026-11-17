@@ -3,15 +3,18 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { withInstanceLock } from './commands/instanceLock.js';
 import { runStart } from './commands/start.js';
 import { runStatus } from './commands/status.js';
+import { runStop } from './commands/stop.js';
 import { processStartTime } from './processInfo.js';
 import { cuisBaseDir, cuisDistDir, instanceLockFile, instancePaths, locksDir } from './paths.js';
 import { CUIS_KEY } from './pin.js';
 import { runCli } from './runCli.js';
 import { instanceState } from './state.js';
 import { startArchiveServer } from './testSupport/archiveServer.js';
+import { writeFakeVmConfig } from './testSupport/fakeVm.js';
 import { buildFakeArchive } from './testSupport/fakeDistribution.js';
 import { makeLifecycleHome } from './testSupport/lifecycleHome.js';
 import { makeTempHome } from './testSupport/tempHome.js';
@@ -265,6 +268,68 @@ describe('runCli', () => {
   });
 
   it.each([
+    [['start', 'demo', '--stdin'], '--stdin'],
+    [['start', 'demo', '--detach'], '--detach'],
+    [['create', 'demo', '--save'], '--save'],
+    [['stop', 'demo', '--detach'], '--detach'],
+    [['status', '--file', 'x'], '--file'],
+    [['reset', 'demo', '--timeout', '5'], '--timeout'],
+    [['destroy', 'demo', '--gui'], '--gui'],
+  ])('rejects %j with exit 2 for a run-only flag, never reading stdin and leaving the home untouched', async (argv, flag) => {
+    // Given
+    const { home, cleanup } = await makeTempHome();
+    try {
+      const readStdin = vi.fn(async () => ({ text: '', isTTY: false }));
+      const ctx = { env: { CUISCTL_HOME: home }, platform: 'darwin' as const, onProgress: () => {}, readStdin };
+      const before = await snapshotDir(home);
+
+      // When
+      const { stdout, exitCode } = await runCli(argv, ctx);
+
+      // Then
+      expect(exitCode).toBe(2);
+      expect(stdout.split('\n')[0]).toBe(`error: unknown option: ${flag}`);
+      expect(readStdin).not.toHaveBeenCalled();
+      expect(await snapshotDir(home)).toEqual(before);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it.each([
+    [['run', 'demo'], { text: '', isTTY: false }],
+    [['run', 'demo', '3', '--file', '/x'], { text: '', isTTY: false }],
+    [['run', 'demo', '   '], { text: '', isTTY: false }],
+    [['run', 'demo', '--file', '/nonexistent/prog.st'], { text: '', isTTY: false }],
+    [['run', 'demo', '1', '--timeout', '0'], { text: '', isTTY: false }],
+    [['run', 'demo', '1', '--timeout', 'abc'], { text: '', isTTY: false }],
+    [['run', 'demo', '1', '--timeout', '301'], { text: '', isTTY: false }],
+    [['run', 'demo', '1', '--timeout', '1.5'], { text: '', isTTY: false }],
+    [['run', 'demo', '1', '--save', '--detach'], { text: '', isTTY: false }],
+    [['run', 'demo', '1', '--headless', '--gui'], { text: '', isTTY: false }],
+    [['run', 'demo', '--stdin'], { text: '', isTTY: true }],
+    [['run', 'demo', '--stdin'], { text: '', isTTY: false }],
+  ])('rejects run usage errors %j with exit 2 before not_found, leaving the home unprepared and starting no VM', async (argv, stdin) => {
+    // Given
+    const { home, cleanup } = await makeTempHome();
+    try {
+      const readStdin = vi.fn(async () => stdin);
+      const ctx = { env: { CUISCTL_HOME: home }, platform: 'darwin' as const, onProgress: () => {}, readStdin };
+      const before = await snapshotDir(home);
+
+      // When
+      const { stdout, exitCode } = await runCli(argv, ctx);
+
+      // Then
+      expect(exitCode).toBe(2);
+      expect(stdout.split('\n')[0]).toMatch(/^error: /);
+      expect(await snapshotDir(home)).toEqual(before);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it.each([
     [['reset', 'demo', '--save'], 'darwin', 2, 'usage', 'unknown option: --save'],
     [['reset', 'demo', '--yes'], 'darwin', 2, 'usage', 'unknown option: --yes'],
     [['destroy', 'demo', '--headless'], 'darwin', 2, 'usage', 'unknown option: --headless'],
@@ -443,6 +508,308 @@ describe('runCli', () => {
     }
   }, 30000);
 
+  it('runs run demo "3 + 4", rendering the passed header and result on stdout and leaving the instance stopped', async () => {
+    // Given
+    const lifecycle = await makeLifecycleHome();
+    try {
+      await writeFakeVmConfig(lifecycle.paths.imageDir, { run: 'passed', result: '7', elapsedMs: 12 });
+      const ctx = {
+        env: { CUISCTL_HOME: lifecycle.home },
+        platform: 'darwin' as const,
+        onProgress: () => {},
+        runOptions: { startTimeoutMs: 10000, pollIntervalMs: 50 },
+      };
+
+      // When
+      const { stdout, exitCode } = await runCli(['run', 'demo', '3 + 4'], ctx);
+      const state = await instanceState(lifecycle.home, 'demo');
+
+      // Then
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('demo: passed (12 ms)');
+      expect(stdout).toContain('result: 7');
+      expect(state.state).toBe('stopped');
+    } finally {
+      await lifecycle.cleanup();
+    }
+  }, 30000);
+
+  it('treats a dash-leading code argument as an unknown option, and runs it as code after the -- separator', async () => {
+    // Given a fresh temp home for the bare form and a lifecycle home with a passing fake VM for the separated form
+    const fresh = await makeTempHome();
+    const lifecycle = await makeLifecycleHome();
+    try {
+      await writeFakeVmConfig(lifecycle.paths.imageDir, { run: 'passed', result: '1', elapsedMs: 3 });
+      const bareCtx = { env: { CUISCTL_HOME: fresh.home }, platform: 'darwin' as const, onProgress: () => {} };
+      const sepCtx = {
+        env: { CUISCTL_HOME: lifecycle.home },
+        platform: 'darwin' as const,
+        onProgress: () => {},
+        runOptions: { startTimeoutMs: 10000, pollIntervalMs: 50 },
+      };
+      const before = await snapshotDir(fresh.home);
+
+      // When
+      const bare = await runCli(['run', 'demo', '-1 abs'], bareCtx);
+      const separated = await runCli(['run', 'demo', '--', '-1 abs'], sepCtx);
+
+      // Then
+      expect(bare.exitCode).toBe(2);
+      expect(bare.stdout.split('\n')[0]).toMatch(/^error: unknown option/);
+      expect(await snapshotDir(fresh.home)).toEqual(before);
+      expect(separated.exitCode).toBe(0);
+      expect(separated.stdout).toContain('demo: passed');
+      expect(separated.stdout).toContain('-1 abs');
+    } finally {
+      await fresh.cleanup();
+      await lifecycle.cleanup();
+    }
+  }, 30000);
+
+  it('runs run demo "[true] whileTrue" --timeout 1 against a hanging VM, rendering timed out with an error and leaving the instance stopped', async () => {
+    // Given
+    const lifecycle = await makeLifecycleHome();
+    try {
+      await writeFakeVmConfig(lifecycle.paths.imageDir, { run: 'hang' });
+      const ctx = {
+        env: { CUISCTL_HOME: lifecycle.home },
+        platform: 'darwin' as const,
+        onProgress: () => {},
+        runOptions: { startTimeoutMs: 10000, pollIntervalMs: 50 },
+      };
+
+      // When
+      const { stdout, exitCode } = await runCli(['run', 'demo', '[true] whileTrue', '--timeout', '1'], ctx);
+      const state = await instanceState(lifecycle.home, 'demo');
+
+      // Then
+      expect(exitCode).toBe(1);
+      expect(stdout.startsWith('demo: timed out (')).toBe(true);
+      expect(stdout).toContain('error:');
+      expect(state.state).toBe('stopped');
+    } finally {
+      await lifecycle.cleanup();
+    }
+  }, 20000);
+
+  it('aborts a run in flight via ctx.signal, emitting interrupted JSON, restoring the image, removing run.json and releasing the instance lock', async () => {
+    // Given
+    const lifecycle = await makeLifecycleHome();
+    try {
+      await writeFakeVmConfig(lifecycle.paths.imageDir, { run: 'hang' });
+      const imageBefore = (await fs.readFile(lifecycle.paths.image)).toString();
+      const controller = new AbortController();
+      const ctx = {
+        env: { CUISCTL_HOME: lifecycle.home },
+        platform: 'darwin' as const,
+        onProgress: () => {},
+        runOptions: { startTimeoutMs: 10000, pollIntervalMs: 50 },
+        signal: controller.signal,
+      };
+
+      // When
+      const pending = runCli(['run', 'demo', '[true] whileTrue', '--json'], ctx);
+      const deadline = Date.now() + 5000;
+      for (;;) {
+        const recordExists = await fs.access(lifecycle.paths.runRecord).then(() => true, () => false);
+        const log = await fs.readFile(lifecycle.paths.vmLog, 'utf8').catch(() => '');
+        if (recordExists && log.includes('BEGIN')) break;
+        if (Date.now() > deadline) throw new Error('run never reached BEGIN');
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      controller.abort();
+      const { stdout, exitCode } = await Promise.race([
+        pending,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('run did not settle after abort')), 5000)),
+      ]);
+      const state = await instanceState(lifecycle.home, 'demo');
+      const imageAfter = (await fs.readFile(lifecycle.paths.image)).toString();
+      const recordLeft = await fs.access(lifecycle.paths.runRecord).then(() => true, () => false);
+      const lockAcquired = await withInstanceLock(lifecycle.home, 'demo', async () => true);
+
+      // Then
+      expect(exitCode).toBe(1);
+      expect(stdout.trimEnd().split('\n')).toHaveLength(1);
+      expect(JSON.parse(stdout)).toMatchObject({ ok: false, command: 'run', error: { kind: 'interrupted' } });
+      expect(state.state).toBe('stopped');
+      expect(imageAfter).toBe(imageBefore);
+      expect(recordLeft).toBe(false);
+      expect(lockAcquired).toBe(true);
+    } finally {
+      await lifecycle.cleanup();
+    }
+  }, 20000);
+
+  it('runs run demo "1 + 1" --gui --detach, reporting detached and leaving the instance running in gui mode', async () => {
+    // Given
+    const lifecycle = await makeLifecycleHome();
+    try {
+      await writeFakeVmConfig(lifecycle.paths.imageDir, { run: 'passed', result: '2', onTerm: 'save', armed: true });
+      const ctx = {
+        env: { CUISCTL_HOME: lifecycle.home },
+        platform: 'darwin' as const,
+        onProgress: () => {},
+        runOptions: { startTimeoutMs: 10000, pollIntervalMs: 50 },
+      };
+
+      try {
+        // When
+        const { stdout, exitCode } = await runCli(['run', 'demo', '1 + 1', '--gui', '--detach'], ctx);
+        const state = await instanceState(lifecycle.home, 'demo');
+
+        // Then
+        expect(exitCode).toBe(0);
+        expect(stdout).toContain('detached: yes');
+        expect(state.state).toBe('running');
+        expect(state.state === 'running' && state.mode).toBe('gui');
+      } finally {
+        await runStop({ home: lifecycle.home, name: 'demo', pollIntervalMs: 50 });
+      }
+    } finally {
+      await lifecycle.cleanup();
+    }
+  }, 30000);
+
+  it('runs run demo "3 + 4" --save --headless, saving the image, launching headless and leaving the instance stopped', async () => {
+    // Given
+    const lifecycle = await makeLifecycleHome();
+    try {
+      await writeFakeVmConfig(lifecycle.paths.imageDir, { run: 'passed', result: '7', onTerm: 'save', armed: true });
+      const imageBefore = (await fs.readFile(lifecycle.paths.image)).toString();
+      const ctx = {
+        env: { CUISCTL_HOME: lifecycle.home },
+        platform: 'darwin' as const,
+        onProgress: () => {},
+        runOptions: { startTimeoutMs: 10000, pollIntervalMs: 50 },
+      };
+
+      // When
+      const { stdout, exitCode } = await runCli(['run', 'demo', '3 + 4', '--save', '--headless'], ctx);
+      const state = await instanceState(lifecycle.home, 'demo');
+      const log = await fs.readFile(lifecycle.invocationLog, 'utf8').catch(() => '');
+      const imageAfter = (await fs.readFile(lifecycle.paths.image)).toString();
+
+      // Then
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('saved: yes');
+      expect(log).toContain('-headless');
+      expect(state.state).toBe('stopped');
+      expect(imageAfter).toBe(`${imageBefore}saved\n`);
+    } finally {
+      await lifecycle.cleanup();
+    }
+  }, 30000);
+
+  it('runs run demo --file prog.st --json, emitting a single JSON line whose output echoes the file contents', async () => {
+    // Given
+    const lifecycle = await makeLifecycleHome();
+    try {
+      await writeFakeVmConfig(lifecycle.paths.imageDir, { run: 'passed', result: '7', elapsedMs: 12 });
+      const progPath = path.join(lifecycle.home, 'prog.st');
+      await fs.writeFile(progPath, "Transcript show: 'from file'");
+      const ctx = {
+        env: { CUISCTL_HOME: lifecycle.home },
+        platform: 'darwin' as const,
+        onProgress: () => {},
+        runOptions: { startTimeoutMs: 10000, pollIntervalMs: 50 },
+      };
+
+      // When
+      const { stdout, exitCode } = await runCli(['run', 'demo', '--file', progPath, '--json'], ctx);
+
+      // Then
+      expect(exitCode).toBe(0);
+      expect(stdout.endsWith('\n')).toBe(true);
+      expect(stdout.trimEnd().split('\n')).toHaveLength(1);
+      const parsed = JSON.parse(stdout);
+      expect(parsed).toMatchObject({
+        ok: true,
+        command: 'run',
+        data: { name: 'demo', status: 'passed', result: '7', elapsedMs: 12, saved: false, detached: false },
+      });
+      expect(parsed.data.output).toContain('from file');
+    } finally {
+      await lifecycle.cleanup();
+    }
+  }, 30000);
+
+  it('renders a failed run as run_failed JSON in either flag position and as text with a single error line, keeping progress out of stdout', async () => {
+    // Given
+    const lifecycle = await makeLifecycleHome();
+    try {
+      await writeFakeVmConfig(lifecycle.paths.imageDir, { run: 'failed', error: 'ZeroDivide', elapsedMs: 3 });
+      const progress: string[] = [];
+      const ctx = {
+        env: { CUISCTL_HOME: lifecycle.home },
+        platform: 'darwin' as const,
+        onProgress: (m: string) => progress.push(m),
+        runOptions: { startTimeoutMs: 10000, pollIntervalMs: 50 },
+      };
+
+      // When
+      const jsonTail = await runCli(['run', 'demo', '1/0', '--json'], ctx);
+      const jsonHead = await runCli(['--json', 'run', 'demo', '1/0'], ctx);
+      const text = await runCli(['run', 'demo', '1/0'], ctx);
+
+      // Then
+      for (const r of [jsonTail, jsonHead]) {
+        expect(r.exitCode).toBe(1);
+        expect(r.stdout.endsWith('\n')).toBe(true);
+        expect(r.stdout.trimEnd().split('\n')).toHaveLength(1);
+        expect(JSON.parse(r.stdout)).toMatchObject({
+          ok: false,
+          command: 'run',
+          error: { kind: 'run_failed' },
+          data: { name: 'demo', status: 'failed', error: 'ZeroDivide', elapsedMs: 3, saved: false, detached: false },
+        });
+      }
+      expect(JSON.parse(jsonHead.stdout)).toEqual(JSON.parse(jsonTail.stdout));
+      expect(text.exitCode).toBe(1);
+      expect(text.stdout.startsWith('demo: failed (3 ms)')).toBe(true);
+      expect(text.stdout.endsWith('error: ZeroDivide\n')).toBe(true);
+      expect(text.stdout.split('\n').filter((l) => l.startsWith('error:'))).toHaveLength(1);
+      expect(text.stdout).not.toContain('hint:');
+      for (const out of [jsonTail.stdout, jsonHead.stdout, text.stdout]) {
+        for (const m of progress) expect(out).not.toContain(m);
+      }
+    } finally {
+      await lifecycle.cleanup();
+    }
+  }, 60000);
+
+  it('runs run demo --stdin, reading stdin exactly once for the code and never reading stdin for other invocations', async () => {
+    // Given
+    const lifecycle = await makeLifecycleHome();
+    try {
+      await writeFakeVmConfig(lifecycle.paths.imageDir, { run: 'passed', result: '7', elapsedMs: 12 });
+      const readStdin = vi.fn(async () => ({ text: 'Transcript show: 3', isTTY: false }));
+      const ctx = {
+        env: { CUISCTL_HOME: lifecycle.home },
+        platform: 'darwin' as const,
+        onProgress: () => {},
+        runOptions: { startTimeoutMs: 10000, pollIntervalMs: 50 },
+        readStdin,
+      };
+
+      // When
+      const viaStdin = await runCli(['run', 'demo', '--stdin'], ctx);
+      const callsAfterStdin = readStdin.mock.calls.length;
+      readStdin.mockClear();
+      await runCli(['run', 'demo', '3 + 4'], ctx);
+      await runCli(['status'], ctx);
+      await runCli(['status', 'demo'], ctx);
+
+      // Then
+      expect(viaStdin.exitCode).toBe(0);
+      expect(viaStdin.stdout).toContain('demo: passed');
+      expect(viaStdin.stdout).toContain('Transcript show: 3');
+      expect(callsAfterStdin).toBe(1);
+      expect(readStdin).not.toHaveBeenCalled();
+    } finally {
+      await lifecycle.cleanup();
+    }
+  }, 30000);
+
   it('runs reset demo on a stopped instance, rendering the pristine-base line in text mode and ok JSON in --json mode', async () => {
     // Given
     const lifecycle = await makeLifecycleHome();
@@ -567,6 +934,30 @@ describe('runCli', () => {
         expect(json.exitCode).toBe(1);
         expect(JSON.parse(json.stdout).error.kind).toBe('unsupported_platform');
       }
+      await expect(fs.access(home)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await fs.rm(parent, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('run off macOS', () => {
+  it('fails run with unsupported_platform, exit 1 and nothing touched, without creating the home', async () => {
+    // Given
+    const parent = await fs.mkdtemp(path.join(os.tmpdir(), 'cuisctl-runcli-run-unsupported-'));
+    const home = path.join(parent, 'nonexistent-home');
+    try {
+      const ctx = { env: { CUISCTL_HOME: home }, platform: 'linux' as const, onProgress: () => {} };
+
+      // When
+      const text = await runCli(['run', 'demo', '1'], ctx);
+      const json = await runCli(['run', 'demo', '1', '--json'], ctx);
+
+      // Then
+      expect(text.exitCode).toBe(1);
+      expect(text.stdout.split('\n')[0]).toMatch(/^error: .*macOS/);
+      expect(json.exitCode).toBe(1);
+      expect(JSON.parse(json.stdout).error.kind).toBe('unsupported_platform');
       await expect(fs.access(home)).rejects.toMatchObject({ code: 'ENOENT' });
     } finally {
       await fs.rm(parent, { recursive: true, force: true });
