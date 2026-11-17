@@ -1,5 +1,6 @@
 ---
-status: complete
+status: archived
+archived: 2026-11-16
 started: 2026-11-14
 spec: initiatives/cuisctl-run-code/technical-spec.md
 last-completed-phase: 14
@@ -251,3 +252,20 @@ Bound: up to 2 rounds
 - [r2/dynamic] inv 31: If the instance does not become ready within the start time limit, the command fails with — skipped: no runtime surface to exercise
 - [r2] note: skip detail inv 31: a boot failure could not be induced without modifying the instance
 - [r2] event: SUMMARY {}
+
+## Retrospective
+
+All 14 phases were completed: 5 scaffold phases and 9 TDD phases, in about 90 red-green-refactor cycles. Auto verification ran 2 rounds. Round 2 passed 39 invariants with none failing. Invariants 24 (save failure) and 31 (boot failure) could not be induced on a healthy instance, so they stayed unverified.
+
+Deviations from the functional spec:
+- runRun takes pre-resolved input, so input resolution lives in runCli.
+- A not_saved failure also restores the image.
+- --keep-running also hands over failed runs.
+- outputBytes counts raw log bytes.
+- The Result ok variant gained `error?: undefined`.
+
+The fake VM never runs Smalltalk, so real-Cuis runs exposed bugs it could not: the outer `on: Error` handler pre-empted the inner one, `messageText` can be nil, `vm.log` lines carry a timestamp prefix that broke marker matching, and class definitions hung on the author-initials prompt. All four were fixed with failing tests first. Lesson: gate a real-VM suite early for anything that generates code for a real runtime.
+
+After verification, the flags --keep and --keep-running were renamed to --save and --detach, because the names were easy to confuse. Live testing also showed that on macOS 27 the stock VM's GUI window has a fixed size. `Display fullScreenMode: true` works as a workaround. This comes from the VM, not cuisctl.
+
+Open follow-ups: a leftover run-backup/ after a hard kill is not self-healed on the next run; run emits no progress messages; and one unreproduced "save on stop: unavailable" was seen on a --gui --detach VM.
