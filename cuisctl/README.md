@@ -7,11 +7,11 @@ Cuis VM/distribution and one pristine base image, downloaded once.
 `cuisctl` is independent from the MCP bridge: it has its own pinned Cuis and its own home,
 `~/.cuisctl`, and never touches `~/.cuis-mcp-bridge`.
 
-Commands: `create`, `status`, `start`, `stop`, `reset` and `destroy`. A thin Claude skill that wraps them lives in `.claude/skills/cuisctl/SKILL.md`.
+Commands: `create`, `status`, `start`, `stop`, `reset`, `destroy` and `run`. A thin Claude skill that wraps them lives in `.claude/skills/cuisctl/SKILL.md`.
 
 ## Requirements
 
-- macOS (`create`, `start`, `stop`, `reset` and `destroy` fail with `unsupported_platform` elsewhere; `status` runs on any platform)
+- macOS (`create`, `start`, `stop`, `reset`, `destroy` and `run` fail with `unsupported_platform` elsewhere; `status` runs on any platform)
 - Node >= 20
 - No runtime dependencies
 
@@ -32,6 +32,9 @@ cuisctl start <name> [--headless] [--bridge] [--json]
 cuisctl stop <name> [--save] [--json]
 cuisctl reset <name> [--json]
 cuisctl destroy <name> [--yes] [--json]
+cuisctl run <name> <code> [--headless | --gui] [--save | --detach] [--timeout <seconds>] [--json]
+cuisctl run <name> --file <path> [options]
+cuisctl run <name> --stdin [options]
 ```
 
 Each command accepts only its own flags; any other flag (for example `create --save`) is a `usage` error.
@@ -220,11 +223,104 @@ $ cuisctl destroy demo --yes --json
 
 `destroy` data is `{name, removed: {instance, files}}`.
 
+### run
+
+`run <name> <code>` boots a **stopped** instance, evaluates one piece of Smalltalk code in its image,
+reports the outcome and, by default, throws every change away.
+
+```
+cuisctl run demo '3 + 4'
+cuisctl run demo --file script.st
+echo 'Smalltalk version' | cuisctl run demo --stdin
+cuisctl run demo -- '-1 abs'          # code starting with "-" needs --, --file or --stdin
+```
+
+- **Exactly one code source**: the `<code>` argument, `--file <path>` or `--stdin`. None, or more
+  than one, is a `usage` error. Code that starts with `-` must follow `--` (or use `--file` /
+  `--stdin`), otherwise it is read as an option. Blank code is a `usage` error.
+- **`--stdin`** reads all of standard input; it needs piped input. From a terminal it fails with
+  `usage` (it never prompts). `--file` that cannot be read is a `usage` error.
+- **Evaluation**: the code is a Smalltalk script (statements, temporaries and several
+  expressions are fine) evaluated in the instance's own image, so classes and methods of that
+  image are visible. The result is the value of the last expression, shown as its `printString`;
+  `nil` when the code gives no value. A syntax error fails the run with `error: syntax error`; an
+  error or unhandled exception fails it with the exception's message text.
+- **Options**:
+  - `--headless` (the default) or `--gui`. Unlike `start`, `run` has **no window by default**;
+    `--gui` opens the window. They are mutually exclusive.
+  - `--timeout <seconds>`: a whole number from 1 to 300, default **60**. It limits only the
+    code, not the boot. Anything else is a `usage` error.
+  - `--save`: persist the changes (below). `--detach`: leave the VM running (below).
+    They are mutually exclusive.
+  - `--json`: one JSON document instead of text.
+- **Disposable by default**: before booting, `run` backs up the image and its changes. After the
+  run the VM is killed and the image and changes are restored **byte for byte**, whatever the
+  outcome, so nothing the code did to the image survives. This covers only the image: the code
+  is not sandboxed, and files it writes (for example into `files/`), network calls and other
+  effects on the machine stay.
+- **`--save`**: after a **passed** run the VM is stopped with save on stop (SIGTERM), so the
+  changes persist (`saved: true`). If the image did not save (or save on stop is unavailable) the
+  run fails with `not_saved` (exit 1) but its document is still reported, and the instance is
+  stopped. A failed or timed out run is never saved; the image is restored.
+- **`--detach`**: after the code finished (passed or failed) the VM is left running with the
+  changed image and nothing is restored (`detached: true`); the instance then shows as `running`
+  in `status` and `stop` ends it. A run that timed out, was interrupted or whose VM ended is
+  always killed and restored.
+- **Outcome**: a `status` of `passed`, `failed` or `timed_out`, and these fields:
+  - `output`: what the code wrote to the Transcript, without the Transcript line prefixes. It is
+    capped at 64 KB: when longer, the first 16 KB and the last 48 KB are kept and
+    `outputTruncated` is true. `outputBytes` is the size of the **raw** log range of the run, which
+    includes the Transcript line prefixes (a timestamp and process ids on every line), so it is
+    larger than the visible text.
+  - `result`: the `printString` of the last expression, capped at 4 KB (`resultTruncated`). Absent
+    when the run did not pass.
+  - `elapsedMs`: time spent running the code only, not the boot or the restore.
+  - `saved`, `detached`: see `--save` and `--detach`.
+  - `error`: the failure message, when the run did not pass.
+- **Failures are reported with their document**: `failed` is `run_failed` and `timed_out` is
+  `run_timed_out`, both exit 1. The text and the JSON document are the same as for a pass.
+- **Lock**: `run` holds the per-instance lock for the whole run (boot, code and restore), so a
+  concurrent `start`, `stop`, `reset`, `destroy --yes` or `run` on that instance fails with `busy`.
+- **`instance_running`**: `run` on an instance that is running (tracked or untracked) is refused;
+  stop it first (`hint: cuisctl stop <name>`).
+- **`start_failed`**: if the VM is not ready within 60 s it is killed, the image is restored and the
+  error carries the end of `vm.log`. `run` never loads the bridge.
+- **Interruption**: Ctrl-C (SIGINT) or SIGTERM kills the VM, restores the image and exits 1 with
+  an `interrupted` error (and, when the code had started, its document).
+- Like `start`, `run` prepares the Cuis home first if needed. `version_mismatch` applies.
+
+```
+$ cuisctl run demo "Transcript show: 'hi'; newLine. 3 + 4"
+demo: passed (12 ms)
+  saved: no
+output:
+hi
+result: 7
+
+$ cuisctl run demo '1/0'
+demo: failed (3 ms)
+  saved: no
+error: <exception message>
+
+$ cuisctl run demo '3 + 4' --json
+{"ok":true,"command":"run","data":{"name":"demo","status":"passed","elapsedMs":12,"output":"","outputBytes":0,"outputTruncated":false,"result":"7","resultTruncated":false,"saved":false,"detached":false}}
+
+$ cuisctl run demo '1/0' --json
+{"ok":false,"command":"run","error":{"kind":"run_failed","message":"<exception message>"},"data":{"name":"demo","status":"failed",...,"error":"<exception message>","saved":false,"detached":false}}
+```
+
+The text form is `<name>: <status> (<elapsed> ms)`, `  saved: yes|no`, `  detached: yes` (only
+when detached), an `output:` block (omitted when empty, followed by
+`[output truncated: <n> bytes in total]` when cut) and `result: <value>` (plus ` [truncated]`) or
+`error: <message>`. The `--json` document is `{ok, command: "run", data}`; on a failure it also has
+`error: {kind, message}` and `data` is still present. `data` is
+`{name, status, elapsedMs, output, outputBytes, outputTruncated, result?, resultTruncated, error?, saved, detached}`.
+
 ### Concurrency
 
-Commands that change one instance (`start`, `stop`, `reset`, `destroy --yes`) take a per-instance lock
+Commands that change one instance (`start`, `stop`, `reset`, `destroy --yes`, `run`) take a per-instance lock
 (`locks/<name>.lock`). If another `cuisctl` command holds it, the second fails at once with
-`busy` instead of waiting. `status` and `destroy` without `--yes` never take it. Different instances proceed independently,
+`busy` instead of waiting (`run` holds it for the whole run). `status` and `destroy` without `--yes` never take it. Different instances proceed independently,
 except that at most one instance can have the bridge on.
 
 ### Instance names
@@ -234,7 +330,7 @@ Anything else fails with `invalid_name`.
 
 ### State of an instance
 
-- `running`: a valid run record (`run.json`, written by `start`) whose process is still alive and running this image.
+- `running`: a valid run record (`run.json`, written by `start`, or by `run` while it runs or with `--detach`) whose process is still alive and running this image.
 - `running (untracked)`: no valid record, but some process has the instance's `.changes` file open
   (for example an image started by hand).
 - `stopped`: otherwise. A stale record is ignored, never deleted.
@@ -250,14 +346,14 @@ the next `create`.
 ## Output and exit codes
 
 - stdout carries exactly one document; progress messages go to stderr.
-- `cuisctl` never prompts, never reads stdin and does not depend on the current directory.
+- `cuisctl` never prompts and does not depend on the current directory. Only `run --stdin` reads standard input, and never from a terminal.
 - `--json` is accepted anywhere on the command line and switches stdout to one JSON document;
   the exit code is the same.
 
 | Exit code | Meaning |
 |-----------|---------|
 | 0 | ok |
-| 1 | command error (including `not_saved`) |
+| 1 | command error (including `not_saved`, `run_failed`, `run_timed_out`, `interrupted`) |
 | 2 | usage error (`usage`) |
 
 Text errors are `error: <message>`, plus a `hint: <hint>` line when there is one.
@@ -279,7 +375,7 @@ running, `pid`, `mode`, `bridge`, `saveOnStop`, `startedAt` (`running_untracked`
 
 | Kind | Meaning |
 |------|---------|
-| `usage` | malformed command line: missing command or name, unknown command or option (for example `destroy --headless`), extra arguments |
+| `usage` | malformed command line: missing command or name, unknown command or option (for example `destroy --headless`), extra arguments; for `run`: no or several code sources, `--save` with `--detach`, `--headless` with `--gui`, bad `--timeout`, blank code, unreadable `--file`, `--stdin` from a terminal |
 | `invalid_name` | instance name breaks the naming rule |
 | `already_exists` | an instance with that name exists |
 | `not_found` | no instance with that name |
@@ -289,14 +385,17 @@ running, `pid`, `mode`, `bridge`, `saveOnStop`, `startedAt` (`running_untracked`
 | `cuis_write_failed` | a filesystem error (`EACCES`, `ENOSPC`, `EROFS`, `ENOENT`, `EPERM`, `ENOTDIR`) while preparing the Cuis home; not used when building an instance |
 | `cuis_base_build_failed` | the smoke boot of the new base image failed |
 | `cuis_corrupt` | the prepared Cuis home is missing files; delete the folder named in the hint and rerun |
-| `busy` | another `cuisctl` command (`start`, `stop`, `reset`, `destroy`) is changing the same instance (or, for `start --bridge`, another bridged start did not finish within the start timeout) |
-| `instance_running` | `start` on an instance running in another mode or bridge choice, or untracked; `stop` of an untracked holder that is not a Squeak VM; `reset` or `destroy` (even with `--yes`) of a running or untracked instance. Hint: `cuisctl stop <name>` |
+| `busy` | another `cuisctl` command (`start`, `stop`, `reset`, `destroy`, `run`) is changing the same instance (or, for `start --bridge`, another bridged start did not finish within the start timeout) |
+| `instance_running` | `start` on an instance running in another mode or bridge choice, or untracked; `stop` of an untracked holder that is not a Squeak VM; `reset`, `destroy` (even with `--yes`) or `run` of a running or untracked instance. Hint: `cuisctl stop <name>` |
 | `port_in_use` | `start --bridge` and something accepts connections on `127.0.0.1:6789`; names the instance when it is one |
-| `start_failed` | the instance was not ready in time, exited early, or the bridge was not loopback-only or its package is missing; includes the end of `vm.log` |
-| `version_mismatch` | `start` or `reset` on an instance made from a Cuis version other than the pinned one |
+| `start_failed` | `start` or `run`: the instance was not ready in time, exited early, or the bridge was not loopback-only or its package is missing; includes the end of `vm.log` |
+| `version_mismatch` | `start`, `reset` or `run` on an instance made from a Cuis version other than the pinned one |
 | `confirmation_required` | `destroy` without `--yes`; nothing was deleted. Names the instance and files folders |
 | `home_not_ready` | `reset` and the Cuis home is not ready (`missing`, `preparing` or `failed`); `reset` never prepares it. Hint: `cuisctl start <name>` |
-| `not_saved` | `stop --save` ended the VM but the image was not saved (exit 1) |
+| `not_saved` | `stop --save`, or `run --save` after a passed run, ended the VM but the image was not saved (exit 1; for `run` the run document is still reported) |
+| `run_failed` | `run`: the code raised an error, was a syntax error, or the VM ended before it finished (exit 1; the run document is still reported) |
+| `run_timed_out` | `run`: the code did not finish within `--timeout`; the VM was killed and the image restored (exit 1; the run document is still reported) |
+| `interrupted` | `run` was interrupted by Ctrl-C or SIGTERM; the VM was killed and the image restored (exit 1) |
 | `internal_error` | any error that is not a `cuisctl` error, with its message; includes raw filesystem errors while building an instance in `create` |
 
 ## Layout under `~/.cuisctl`
@@ -314,7 +413,7 @@ instances/<name>/
   Packages/               real directories, each file a symlink into the shared distribution
   files/                  the instance's files
   vm.log                  VM output (appended; `start` and its failures log here)
-  run.json                record of the running VM (pid, start time, mode, bridge, save on stop); written by `start`, removed by `stop`
+  run.json                record of the running VM (pid, start time, mode, bridge, save on stop); written by `start` (and by `run` while it runs), removed by `stop`
   start.st                start script generated by each `start`
   ready                   written by the start script when the image is ready (`armed=true|false`)
 locks/                    per-instance locks `<name>.lock` and `bridge.lock`, outside `instances/`
